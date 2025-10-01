@@ -35,13 +35,15 @@ export const registerProcedure = publicProcedure
         throw new Error('This gamer handle is already taken. Please choose another one.');
       }
       
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
         email,
         password,
-        email_confirm: false,
-        user_metadata: {
-          name,
-          gamer_handle: gamerHandle,
+        options: {
+          data: {
+            name,
+            gamer_handle: gamerHandle,
+          },
+          emailRedirectTo: undefined,
         },
       });
       

@@ -326,15 +326,6 @@ export default function AuthScreen() {
               </Text>
             </TouchableOpacity>
 
-            {mode === 'login' && (
-              <TouchableOpacity
-                style={styles.forgotPasswordButton}
-                onPress={() => Alert.alert('Reset Password', 'Password reset functionality coming soon!')}
-              >
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-              </TouchableOpacity>
-            )}
-
             {mode === 'signup' && (
               <Text style={styles.infoText}>
                 You&apos;ll receive a confirmation email after signing up. Please verify your email before logging in.
@@ -365,7 +356,7 @@ const styles = StyleSheet.create({
   },
   logoSection: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 40,
   },
   logoContainer: {
     alignItems: 'center',
@@ -386,8 +377,8 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   tagline: {
-    fontSize: 16,
-    color: '#64748B',
+    fontSize: 15,
+    color: '#94A3B8',
     textAlign: 'center',
   },
   formContainer: {
@@ -490,13 +481,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 18,
-  },
-  forgotPasswordButton: {
-    alignSelf: 'center',
-    marginTop: 12,
-  },
-  forgotPasswordText: {
-    fontSize: 14,
-    color: '#0EA5E9',
+    paddingHorizontal: 8,
   },
 });
