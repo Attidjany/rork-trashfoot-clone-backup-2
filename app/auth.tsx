@@ -157,6 +157,7 @@ export default function AuthScreen() {
       setHandleAvailable(null);
       setHandleSuggestions([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gamerHandle, mode]);
 
   const handleAuth = async () => {
