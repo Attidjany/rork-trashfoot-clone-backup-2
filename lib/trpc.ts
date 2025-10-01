@@ -5,20 +5,10 @@ import superjson from 'superjson';
 
 const getBaseUrl = () => {
   if (typeof window === 'undefined') {
-    return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+    return process.env.EXPO_PUBLIC_API_URL || 'https://trashfoot.vercel.app';
   }
   
-  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  
-  if (isDev) {
-    const port = window.location.port;
-    if (port === '8081' || port === '19006') {
-      return 'http://localhost:3001';
-    }
-    return `http://localhost:${port}`;
-  }
-  
-  console.log('Production mode - using same origin for API:', window.location.origin);
+  console.log('Using same origin for API:', window.location.origin);
   return window.location.origin;
 };
 
