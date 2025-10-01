@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { publicProcedure } from "@/backend/trpc/create-context";
+import { supabaseAdmin } from "@/backend/lib/supabase-server";
 
 export const checkGamerHandleProcedure = publicProcedure
   .input(
@@ -7,19 +8,31 @@ export const checkGamerHandleProcedure = publicProcedure
       gamerHandle: z.string().min(3).max(20),
     })
   )
-  .query(async ({ input }) => {
-    // In a real app, check database for existing gamer handle
-    // For demo, simulate some taken handles
-    const takenHandles = ['striker_alex', 'goal_machine', 'football_king', 'super_admin'];
-    
-    const isAvailable = !takenHandles.includes(input.gamerHandle.toLowerCase());
-    
-    return {
-      available: isAvailable,
-      suggestions: isAvailable ? [] : [
-        `${input.gamerHandle}1`,
-        `${input.gamerHandle}_pro`,
-        `${input.gamerHandle}2024`,
-      ],
-    };
+  .mutation(async ({ input }) => {
+    try {
+      const gamerHandle = input.gamerHandle.trim();
+      
+      const { data: existingHandle } = await supabaseAdmin
+        .from('players')
+        .select('id')
+        .eq('gamer_handle', gamerHandle)
+        .single();
+      
+      const isAvailable = !existingHandle;
+      
+      return {
+        available: isAvailable,
+        suggestions: isAvailable ? [] : [
+          `${gamerHandle}1`,
+          `${gamerHandle}_pro`,
+          `${gamerHandle}${new Date().getFullYear()}`,
+        ],
+      };
+    } catch (error) {
+      console.error('Error checking gamer handle:', error);
+      return {
+        available: true,
+        suggestions: [],
+      };
+    }
   });

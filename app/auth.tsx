@@ -47,23 +47,20 @@ export default function AuthScreen() {
   
   const loginMutation = trpc.auth.login.useMutation();
   const registerMutation = trpc.auth.register.useMutation();
-  
+  const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
 
   useEffect(() => {
     if (mode === 'signup' && gamerHandle.length >= 3) {
       const timeoutId = setTimeout(async () => {
         setCheckingHandle(true);
         try {
-          const takenHandles = ['striker_alex', 'goal_machine', 'football_king', 'super_admin'];
-          const isAvailable = !takenHandles.includes(gamerHandle.toLowerCase());
-          setHandleAvailable(isAvailable);
-          setHandleSuggestions(isAvailable ? [] : [
-            `${gamerHandle}1`,
-            `${gamerHandle}_pro`,
-            `${gamerHandle}2024`,
-          ]);
+          const result = await checkHandleMutation.mutateAsync({ gamerHandle: gamerHandle.trim() });
+          setHandleAvailable(result.available);
+          setHandleSuggestions(result.available ? [] : result.suggestions || []);
         } catch (error) {
           console.error('Error checking handle:', error);
+          setHandleAvailable(null);
+          setHandleSuggestions([]);
         } finally {
           setCheckingHandle(false);
         }
@@ -74,7 +71,7 @@ export default function AuthScreen() {
       setHandleAvailable(null);
       setHandleSuggestions([]);
     }
-  }, [gamerHandle, mode]);
+  }, [gamerHandle, mode, checkHandleMutation]);
 
   const handleAuth = async () => {
     if (!email.trim()) {
@@ -121,6 +118,11 @@ export default function AuthScreen() {
         
         console.log('Signup successful:', result.user.name);
         
+        setEmail('');
+        setPassword('');
+        setName('');
+        setGamerHandle('');
+        
         Alert.alert(
           'Check Your Email',
           'We sent you a confirmation email. Please check your inbox and click the confirmation link to activate your account before logging in.',
@@ -156,23 +158,20 @@ export default function AuthScreen() {
       console.error('Error type:', typeof error);
       console.error('Error:', error);
       console.error('Error message:', error?.message);
-      console.error('Error data:', error?.data);
-      console.error('Error shape:', error?.shape);
       
       let errorMessage = 'Authentication failed. Please try again.';
       
-      if (error?.shape?.message) {
-        errorMessage = error.shape.message;
-      } else if (error?.message) {
+      if (error?.message) {
         errorMessage = error.message;
       } else if (typeof error === 'string') {
         errorMessage = error;
-      } else if (error?.data?.message) {
-        errorMessage = error.data.message;
       }
       
       console.error('Final error message:', errorMessage);
-      Alert.alert('Authentication Failed', errorMessage);
+      Alert.alert(
+        mode === 'login' ? 'Login Failed' : 'Signup Failed', 
+        errorMessage
+      );
     } finally {
       setIsLoading(false);
     }
