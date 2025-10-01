@@ -30,7 +30,7 @@ import {
   Database,
 } from 'lucide-react-native';
 
-import { AdminData, Group, Player } from '@/types/game';
+import { AdminData, Group, Player, Competition, Match } from '@/types/game';
 import { trpc } from '@/lib/trpc';
 
 type TabType = 'overview' | 'accounts' | 'groups' | 'users' | 'matches' | 'activity';
@@ -227,7 +227,21 @@ export default function AdminScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [refreshing, setRefreshing] = useState(false);
   
-  const adminData = useMemo(() => createAdminDummyData(), []);
+  const adminData = useMemo<AdminData>(() => ({
+    allGroups: [],
+    allUsers: [],
+    platformStats: {
+      totalUsers: 0,
+      totalGroups: 0,
+      totalMatches: 0,
+      totalCompetitions: 0,
+      activeGroups: 0,
+      completedMatches: 0,
+      liveMatches: 0,
+      scheduledMatches: 0,
+    },
+    recentActivity: [],
+  }), []);
   
   // Backend queries
   const accountsQuery = trpc.admin.getAllAccounts.useQuery();
@@ -251,7 +265,7 @@ export default function AdminScreen() {
   
   const filteredGroups = useMemo(() => {
     if (!searchQuery) return adminData.allGroups;
-    return adminData.allGroups.filter(group => 
+    return adminData.allGroups.filter((group: Group) => 
       group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       group.description.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -259,15 +273,15 @@ export default function AdminScreen() {
   
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return adminData.allUsers;
-    return adminData.allUsers.filter(user => 
+    return adminData.allUsers.filter((user: Player) => 
       user.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [adminData.allUsers, searchQuery]);
   
   const allMatches = useMemo(() => {
-    return adminData.allGroups.flatMap(g => 
-      g.competitions.flatMap(c => 
-        c.matches.map(m => ({ ...m, groupName: g.name, competitionName: c.name }))
+    return adminData.allGroups.flatMap((g: Group) => 
+      g.competitions.flatMap((c: Competition) => 
+        c.matches.map((m: Match) => ({ ...m, groupName: g.name, competitionName: c.name }))
       )
     );
   }, [adminData.allGroups]);
@@ -332,7 +346,7 @@ export default function AdminScreen() {
       
       <Text style={styles.sectionTitle}>Recent Activity</Text>
       <View style={styles.activityList}>
-        {adminData.recentActivity.slice(0, 5).map((activity, index) => (
+        {adminData.recentActivity.slice(0, 5).map((activity: AdminData['recentActivity'][0], index: number) => (
           <ActivityItem key={index} activity={activity} />
         ))}
       </View>
@@ -353,7 +367,7 @@ export default function AdminScreen() {
       </View>
       
       <Text style={styles.sectionTitle}>All Groups ({filteredGroups.length})</Text>
-      {filteredGroups.map(group => (
+      {filteredGroups.map((group: Group) => (
         <GroupCard 
           key={group.id} 
           group={group} 
@@ -445,7 +459,7 @@ export default function AdminScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                const dummyEmails = accounts?.dummyAccounts.map(acc => acc.email).filter(Boolean) as string[] || [];
+                const dummyEmails = accounts?.dummyAccounts.map((acc: Player) => acc.email).filter(Boolean) as string[] || [];
                 await bulkDeleteMutation.mutateAsync({ 
                   emails: dummyEmails, 
                   accountType: 'dummy' 
@@ -516,7 +530,7 @@ export default function AdminScreen() {
         
         {/* Dummy Accounts Section */}
         <Text style={styles.sectionTitle}>Dummy Accounts ({accounts?.dummyAccounts.length || 0})</Text>
-        {accounts?.dummyAccounts.map(user => (
+        {accounts?.dummyAccounts.map((user: Player) => (
           <View key={`dummy-${user.id}`} style={[styles.card, styles.dummyAccountCard]}>
             <View style={styles.cardHeader}>
               <View>
@@ -551,7 +565,7 @@ export default function AdminScreen() {
             <Text style={styles.emptyStateSubtext}>Real accounts will appear here when users register</Text>
           </View>
         ) : (
-          accounts?.realAccounts.map(user => (
+          accounts?.realAccounts.map((user: Player) => (
             <View key={`real-${user.id}`} style={[styles.card, styles.realAccountCard]}>
               <View style={styles.cardHeader}>
                 <View>
@@ -598,7 +612,7 @@ export default function AdminScreen() {
       </View>
       
       <Text style={styles.sectionTitle}>All Users ({filteredUsers.length})</Text>
-      {filteredUsers.map(user => (
+      {filteredUsers.map((user: Player) => (
         <UserCard 
           key={user.id} 
           user={user} 
@@ -615,9 +629,9 @@ export default function AdminScreen() {
   const renderMatches = () => (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.sectionTitle}>All Matches ({allMatches.length})</Text>
-      {allMatches.map(match => {
-        const homePlayer = adminData.allUsers.find(u => u.id === match.homePlayerId);
-        const awayPlayer = adminData.allUsers.find(u => u.id === match.awayPlayerId);
+      {allMatches.map((match: Match & { groupName: string; competitionName: string }) => {
+        const homePlayer = adminData.allUsers.find((u: Player) => u.id === match.homePlayerId);
+        const awayPlayer = adminData.allUsers.find((u: Player) => u.id === match.awayPlayerId);
         
         return (
           <View key={match.id} style={styles.card}>
@@ -677,7 +691,7 @@ export default function AdminScreen() {
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.sectionTitle}>Recent Activity</Text>
       <View style={styles.activityList}>
-        {adminData.recentActivity.map((activity, index) => (
+        {adminData.recentActivity.map((activity: AdminData['recentActivity'][0], index: number) => (
           <ActivityItem key={index} activity={activity} />
         ))}
       </View>
