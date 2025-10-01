@@ -4,13 +4,19 @@
   "outputDirectory": "dist",
   "framework": null,
   "functions": {
-    "api/**/*.ts": {
-      "runtime": "@vercel/node@3.2.17",
+    "api/index.ts": {
+      "runtime": "nodejs20.x",
       "maxDuration": 10
     }
   },
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
