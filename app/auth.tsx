@@ -27,17 +27,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { trpc } from '@/lib/trpc';
-import { createDummyData } from '@/mocks/dummy-data';
 
 type AuthMode = 'login' | 'signup';
+type LoginMethod = 'email' | 'phone';
 
 export default function AuthScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { createUser, setLoggedInUser } = useGameStore();
+  const { setLoggedInUser } = useGameStore();
   
   const [mode, setMode] = useState<AuthMode>('login');
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [gamerHandle, setGamerHandle] = useState('');
@@ -50,86 +52,7 @@ export default function AuthScreen() {
   const loginMutation = trpc.auth.login.useMutation();
   const registerMutation = trpc.auth.register.useMutation();
   
-  // Offline login fallback
-  const handleOfflineLogin = (email: string, password: string) => {
-    console.log('=== OFFLINE LOGIN ATTEMPT ===');
-    console.log('Email:', email);
-    
-    const offlineCredentials = [
-      { email: 'alex@trashfoot.com', password: 'striker123', name: 'Alex "Striker" Johnson', handle: 'striker_alex', role: 'admin' },
-      { email: 'marcus@trashfoot.com', password: 'wall123', name: 'Marcus "The Wall" Rodriguez', handle: 'the_wall', role: 'player' },
-      { email: 'jamie@trashfoot.com', password: 'speed123', name: 'Jamie "Speed" Chen', handle: 'speed_chen', role: 'player' },
-      { email: 'david@trashfoot.com', password: 'maestro123', name: 'David "Maestro" Silva', handle: 'maestro_david', role: 'player' },
-      { email: 'sarah@trashfoot.com', password: 'rocket123', name: 'Sarah "Rocket" Kim', handle: 'rocket_sarah', role: 'player' },
-      { email: 'mike@trashfoot.com', password: 'clutch123', name: 'Mike "Clutch" Thompson', handle: 'clutch_mike', role: 'player' },
-      { email: 'admin@trashfoot.com', password: 'admin123', name: 'Super Admin', handle: 'super_admin', role: 'super_admin' },
-    ];
-    
-    const offlineUser = offlineCredentials.find(c => 
-      c.email === email.trim() && c.password === password.trim()
-    );
-    
-    if (!offlineUser) {
-      throw new Error('Invalid credentials. Available demo accounts:\n\n• alex@trashfoot.com / striker123\n• marcus@trashfoot.com / wall123\n• jamie@trashfoot.com / speed123\n• david@trashfoot.com / maestro123\n• sarah@trashfoot.com / rocket123\n• mike@trashfoot.com / clutch123\n• admin@trashfoot.com / admin123');
-    }
-    
-    console.log('Offline user found:', offlineUser.name);
-    
-    if (offlineUser.role === 'super_admin') {
-      // Super admin doesn't need game data
-      const adminUser = {
-        id: 'super_admin',
-        name: offlineUser.name,
-        gamerHandle: offlineUser.handle,
-        email: offlineUser.email,
-        role: 'super_admin' as const,
-        status: 'active' as const,
-        joinedAt: new Date().toISOString(),
-        stats: {
-          played: 0,
-          wins: 0,
-          draws: 0,
-          losses: 0,
-          goalsFor: 0,
-          goalsAgainst: 0,
-          cleanSheets: 0,
-          points: 0,
-          winRate: 0,
-          form: [],
-        },
-      };
-      setLoggedInUser(adminUser);
-    } else {
-      // Regular user - create dummy data
-      console.log('Creating dummy data for offline login');
-      const dummyData = createDummyData();
-      const allPlayers = dummyData.groups.flatMap(g => g.members);
-      
-      const user = allPlayers.find(p => p.email === offlineUser.email);
-      if (!user) {
-        throw new Error('User not found in dummy data');
-      }
-      
-      const gameData = {
-        currentUser: user,
-        groups: dummyData.groups,
-        activeGroupId: dummyData.groups.length > 0 ? dummyData.groups[0].id : '',
-        messages: dummyData.messages || [],
-      };
-      
-      console.log('Setting offline user with game data:', {
-        user: user.name,
-        groupsCount: gameData.groups.length,
-        matchesCount: gameData.groups.flatMap(g => g.competitions.flatMap(c => c.matches)).length,
-        messagesCount: gameData.messages.length
-      });
-      
-      setLoggedInUser(user, gameData);
-    }
-    
-    console.log('Offline login successful for:', offlineUser.name);
-    return true;
-  };
+
 
   // Check gamer handle availability with debounce
   useEffect(() => {
@@ -161,8 +84,16 @@ export default function AuthScreen() {
   }, [gamerHandle, mode]);
 
   const handleAuth = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (loginMethod === 'email' && !email.trim()) {
+      Alert.alert('Error', 'Please enter your email');
+      return;
+    }
+    if (loginMethod === 'phone' && !phone.trim()) {
+      Alert.alert('Error', 'Please enter your phone number');
+      return;
+    }
+    if (!password.trim()) {
+      Alert.alert('Error', 'Please enter your password');
       return;
     }
 
@@ -184,59 +115,49 @@ export default function AuthScreen() {
     setIsLoading(true);
     console.log('=== AUTH ATTEMPT ===');
     console.log('Mode:', mode);
+    console.log('Login Method:', loginMethod);
     console.log('Email:', email.trim());
+    console.log('Phone:', phone.trim());
 
     try {
       if (mode === 'signup') {
-        try {
-          const result = await registerMutation.mutateAsync({
-            name: name.trim(),
-            gamerHandle: gamerHandle.trim(),
-            email: email.trim(),
-            password: password.trim(),
-          });
-          
-          console.log('Signup successful:', result.user.name);
-          // Store user data - for signup, create new user without game data
-          createUser(result.user.name, result.user.gamerHandle, result.user.email);
-          console.log('Signup successful, navigating to home');
-          router.replace('/(tabs)/home');
-        } catch (backendError) {
-          console.log('Backend signup failed, creating offline user');
-          createUser(name.trim(), gamerHandle.trim(), email.trim());
-          router.replace('/(tabs)/home');
-        }
+        const result = await registerMutation.mutateAsync({
+          name: name.trim(),
+          gamerHandle: gamerHandle.trim(),
+          email: loginMethod === 'email' ? email.trim() : undefined,
+          phone: loginMethod === 'phone' ? phone.trim() : undefined,
+          password: password.trim(),
+        });
+        
+        console.log('Signup successful:', result.user.name);
+        setLoggedInUser(result.user);
+        console.log('Signup successful, navigating to home');
+        router.replace('/(tabs)/home');
       } else {
         console.log('Attempting backend login...');
         
-        try {
-          const result = await loginMutation.mutateAsync({
-            email: email.trim(),
-            password: password.trim(),
-          });
-          
-          console.log('=== LOGIN BACKEND SUCCESS ===');
-          console.log('User:', result.user.name, '(' + result.user.email + ')');
-          console.log('Role:', result.user.role);
-          console.log('Has game data:', !!result.gameData);
-          console.log('Groups count:', result.gameData?.groups?.length || 0);
-          
-          // Set user data in the game store
-          if (result.gameData) {
-            console.log('Setting logged in user with game data');
-            setLoggedInUser(result.user, result.gameData);
-          } else {
-            console.log('Setting logged in user without game data (super admin)');
-            setLoggedInUser(result.user);
-          }
-          
-          console.log('State set successfully, navigating to home...');
-          router.replace('/(tabs)/home');
-        } catch (backendError) {
-          console.log('Backend login failed, trying offline login...');
-          handleOfflineLogin(email.trim(), password.trim());
-          router.replace('/(tabs)/home');
+        const result = await loginMutation.mutateAsync({
+          email: loginMethod === 'email' ? email.trim() : undefined,
+          phone: loginMethod === 'phone' ? phone.trim() : undefined,
+          password: password.trim(),
+        });
+        
+        console.log('=== LOGIN BACKEND SUCCESS ===');
+        console.log('User:', result.user.name);
+        console.log('Role:', result.user.role);
+        console.log('Has game data:', !!result.gameData);
+        console.log('Groups count:', result.gameData?.groups?.length || 0);
+        
+        if (result.gameData) {
+          console.log('Setting logged in user with game data');
+          setLoggedInUser(result.user, result.gameData);
+        } else {
+          console.log('Setting logged in user without game data');
+          setLoggedInUser(result.user);
         }
+        
+        console.log('State set successfully, navigating to home...');
+        router.replace('/(tabs)/home');
       }
     } catch (error: any) {
       console.error('=== AUTH ERROR ===');
@@ -313,6 +234,28 @@ export default function AuthScreen() {
               </TouchableOpacity>
             </View>
 
+            {mode === 'login' && (
+              <View style={styles.loginMethodSelector}>
+                <TouchableOpacity
+                  style={[styles.methodButton, loginMethod === 'email' && styles.activeMethodButton]}
+                  onPress={() => setLoginMethod('email')}
+                >
+                  <Mail size={16} color={loginMethod === 'email' ? '#fff' : '#64748B'} />
+                  <Text style={[styles.methodText, loginMethod === 'email' && styles.activeMethodText]}>
+                    Email
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.methodButton, loginMethod === 'phone' && styles.activeMethodButton]}
+                  onPress={() => setLoginMethod('phone')}
+                >
+                  <Text style={[styles.methodText, loginMethod === 'phone' && styles.activeMethodText]}>
+                    📱 Phone
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {mode === 'signup' && (
               <>
                 <View style={styles.inputContainer}>
@@ -362,19 +305,37 @@ export default function AuthScreen() {
               </>
             )}
 
-            <View style={styles.inputContainer}>
-              <Mail size={20} color="#64748B" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="#64748B"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
+            {(mode === 'signup' || loginMethod === 'email') && (
+              <View style={styles.inputContainer}>
+                <Mail size={20} color="#64748B" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor="#64748B"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            )}
+
+            {mode === 'login' && loginMethod === 'phone' && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.phoneIcon}>📱</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Phone Number (e.g., +1234567890)"
+                  placeholderTextColor="#64748B"
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            )}
 
             <View style={styles.inputContainer}>
               <Lock size={20} color="#64748B" style={styles.inputIcon} />
@@ -410,56 +371,9 @@ export default function AuthScreen() {
             </TouchableOpacity>
 
             {mode === 'login' && (
-              <>
-                <TouchableOpacity style={styles.forgotPassword}>
-                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                </TouchableOpacity>
-                
-                {/* Demo Credentials */}
-                <View style={styles.demoCredentials}>
-                  <Text style={styles.demoTitle}>Demo Accounts:</Text>
-                  <TouchableOpacity 
-                    style={styles.demoAccount}
-                    onPress={() => {
-                      setEmail('alex@trashfoot.com');
-                      setPassword('striker123');
-                    }}
-                  >
-                    <Text style={styles.demoAccountText}>Alex &quot;Striker&quot; Johnson (Admin)</Text>
-                    <Text style={styles.demoCredText}>alex@trashfoot.com / striker123</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.demoAccount}
-                    onPress={() => {
-                      setEmail('marcus@trashfoot.com');
-                      setPassword('wall123');
-                    }}
-                  >
-                    <Text style={styles.demoAccountText}>Marcus &quot;The Wall&quot; Rodriguez</Text>
-                    <Text style={styles.demoCredText}>marcus@trashfoot.com / wall123</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.demoAccount}
-                    onPress={() => {
-                      setEmail('jamie@trashfoot.com');
-                      setPassword('speed123');
-                    }}
-                  >
-                    <Text style={styles.demoAccountText}>Jamie &quot;Speed&quot; Chen</Text>
-                    <Text style={styles.demoCredText}>jamie@trashfoot.com / speed123</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.demoAccount}
-                    onPress={() => {
-                      setEmail('admin@trashfoot.com');
-                      setPassword('admin123');
-                    }}
-                  >
-                    <Text style={styles.demoAccountText}>Super Admin</Text>
-                    <Text style={styles.demoCredText}>admin@trashfoot.com / admin123</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
+              <TouchableOpacity style={styles.forgotPassword}>
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
             )}
 
             {/* Social Auth */}
@@ -489,16 +403,7 @@ export default function AuthScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Guest Access */}
-            <TouchableOpacity
-              style={styles.guestButton}
-              onPress={() => {
-                createUser('Guest User', 'guest_user', undefined);
-                router.replace('/(tabs)/home');
-              }}
-            >
-              <Text style={styles.guestButtonText}>Continue as Guest</Text>
-            </TouchableOpacity>
+
           </View>
         </ScrollView>
       </LinearGradient>
@@ -723,5 +628,37 @@ const styles = StyleSheet.create({
   demoCredText: {
     fontSize: 12,
     color: '#64748B',
+  },
+  loginMethodSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    gap: 4,
+  },
+  methodButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  activeMethodButton: {
+    backgroundColor: '#0EA5E9',
+  },
+  methodText: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: '#64748B',
+  },
+  activeMethodText: {
+    color: '#fff',
+  },
+  phoneIcon: {
+    fontSize: 20,
+    marginRight: 12,
   },
 });

@@ -187,22 +187,43 @@ async function fetchGroupMessages(groupIds: string[]): Promise<ChatMessage[]> {
 export const loginProcedure = publicProcedure
   .input(
     z.object({
-      email: z.string().email("Invalid email address"),
+      email: z.string().optional(),
+      phone: z.string().optional(),
       password: z.string().min(1, "Password is required"),
+    }).refine(data => data.email || data.phone, {
+      message: "Either email or phone is required",
     })
   )
   .mutation(async ({ input }) => {
     try {
       console.log('=== LOGIN ATTEMPT ===');
       console.log('Email:', input.email);
+      console.log('Phone:', input.phone);
       
-      const email = input.email.trim();
       const password = input.password.trim();
       
-      const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
-        email,
-        password,
-      });
+      let authData;
+      let authError;
+      
+      if (input.email) {
+        const email = input.email.trim();
+        const result = await supabaseAdmin.auth.signInWithPassword({
+          email,
+          password,
+        });
+        authData = result.data;
+        authError = result.error;
+      } else if (input.phone) {
+        const phone = input.phone.trim();
+        const result = await supabaseAdmin.auth.signInWithPassword({
+          phone,
+          password,
+        });
+        authData = result.data;
+        authError = result.error;
+      } else {
+        throw new Error('Either email or phone is required');
+      }
       
       if (authError || !authData.user || !authData.session) {
         console.error('Auth error:', authError);
@@ -211,11 +232,26 @@ export const loginProcedure = publicProcedure
       
       console.log('Auth successful for user:', authData.user.id);
       
-      const { data: player, error: playerError } = await supabaseAdmin
-        .from('players')
-        .select('*')
-        .eq('auth_user_id', authData.user.id)
-        .single();
+      let player;
+      let playerError;
+      
+      if (input.email) {
+        const result = await supabaseAdmin
+          .from('players')
+          .select('*')
+          .eq('email', input.email.trim())
+          .single();
+        player = result.data;
+        playerError = result.error;
+      } else if (input.phone) {
+        const result = await supabaseAdmin
+          .from('players')
+          .select('*')
+          .eq('phone', input.phone.trim())
+          .single();
+        player = result.data;
+        playerError = result.error;
+      }
       
       if (playerError || !player) {
         console.error('Player not found:', playerError);

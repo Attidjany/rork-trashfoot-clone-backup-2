@@ -29,7 +29,7 @@ import {
   RefreshCw,
   Database,
 } from 'lucide-react-native';
-import { createAdminDummyData } from '@/mocks/dummy-data';
+
 import { AdminData, Group, Player } from '@/types/game';
 import { trpc } from '@/lib/trpc';
 

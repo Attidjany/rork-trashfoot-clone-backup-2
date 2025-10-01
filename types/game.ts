@@ -3,6 +3,7 @@ export interface Player {
   name: string;
   gamerHandle: string;
   email?: string;
+  phone?: string;
   avatar?: string;
   joinedAt: string;
   stats: PlayerStats;

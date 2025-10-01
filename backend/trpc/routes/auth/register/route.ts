@@ -8,8 +8,11 @@ export const registerProcedure = publicProcedure
     z.object({
       name: z.string().min(2, "Name must be at least 2 characters"),
       gamerHandle: z.string().min(3, "Gamer handle must be at least 3 characters").max(20, "Gamer handle must be less than 20 characters"),
-      email: z.string().email("Invalid email address"),
+      email: z.string().email("Invalid email address").optional(),
+      phone: z.string().optional(),
       password: z.string().min(6, "Password must be at least 6 characters"),
+    }).refine(data => data.email || data.phone, {
+      message: "Either email or phone is required",
     })
   )
   .mutation(async ({ input }) => {
@@ -18,8 +21,8 @@ export const registerProcedure = publicProcedure
       console.log('Name:', input.name);
       console.log('Gamer Handle:', input.gamerHandle);
       console.log('Email:', input.email);
+      console.log('Phone:', input.phone);
       
-      const email = input.email.trim();
       const name = input.name.trim();
       const gamerHandle = input.gamerHandle.trim();
       const password = input.password.trim();
@@ -36,11 +39,30 @@ export const registerProcedure = publicProcedure
       }
       
       // Create auth user in Supabase
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
+      let authData;
+      let authError;
+      
+      if (input.email) {
+        const email = input.email.trim();
+        const result = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+        authData = result.data;
+        authError = result.error;
+      } else if (input.phone) {
+        const phone = input.phone.trim();
+        const result = await supabaseAdmin.auth.admin.createUser({
+          phone,
+          password,
+          phone_confirm: true,
+        });
+        authData = result.data;
+        authError = result.error;
+      } else {
+        throw new Error('Either email or phone is required');
+      }
       
       if (authError || !authData.user) {
         console.error('Auth error:', authError);
@@ -56,7 +78,8 @@ export const registerProcedure = publicProcedure
           auth_user_id: authData.user.id,
           name,
           gamer_handle: gamerHandle,
-          email,
+          email: input.email?.trim() || null,
+          phone: input.phone?.trim() || null,
           role: 'player',
           status: 'active',
         })
@@ -84,21 +107,44 @@ export const registerProcedure = publicProcedure
       }
       
       // Sign in the user to get a session
-      const { data: sessionData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
-        email,
-        password,
-      });
+      let sessionToken: string;
       
-      if (signInError || !sessionData.session) {
-        console.error('Sign in error:', signInError);
-        throw new Error('Account created but failed to sign in. Please try logging in.');
+      if (input.email) {
+        const email = input.email.trim();
+        const result = await supabaseAdmin.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (result.error || !result.data.session) {
+          console.error('Sign in error:', result.error);
+          throw new Error('Account created but failed to sign in. Please try logging in.');
+        }
+        
+        sessionToken = result.data.session.access_token;
+      } else if (input.phone) {
+        const phone = input.phone.trim();
+        const result = await supabaseAdmin.auth.signInWithPassword({
+          phone,
+          password,
+        });
+        
+        if (result.error || !result.data.session) {
+          console.error('Sign in error:', result.error);
+          throw new Error('Account created but failed to sign in. Please try logging in.');
+        }
+        
+        sessionToken = result.data.session.access_token;
+      } else {
+        throw new Error('Either email or phone is required');
       }
       
       const user: Player = {
         id: player.id,
         name: player.name,
         gamerHandle: player.gamer_handle,
-        email: player.email,
+        email: player.email || '',
+        phone: player.phone || undefined,
         role: player.role as 'player' | 'admin' | 'super_admin',
         status: player.status as 'active' | 'suspended' | 'banned',
         joinedAt: player.joined_at,
@@ -123,7 +169,7 @@ export const registerProcedure = publicProcedure
       
       return {
         user,
-        token: sessionData.session.access_token,
+        token: sessionToken,
         message: "Account created successfully!",
       };
     } catch (error) {
