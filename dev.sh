@@ -31,7 +31,7 @@ BACKEND_PID=$!
 
 sleep 2
 
-bunx rork start -p pjno48qqvxyfiw5d0brt0 --tunnel &
+bunx rork start -p niqdoqm9dz49jqmoeo0np --tunnel &
 FRONTEND_PID=$!
 
 # Function to cleanup processes on exit

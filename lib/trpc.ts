@@ -11,7 +11,11 @@ const getBaseUrl = () => {
   const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   
   if (isDev) {
-    return 'http://localhost:3001';
+    const port = window.location.port;
+    if (port === '8081' || port === '19006') {
+      return 'http://localhost:3001';
+    }
+    return `http://localhost:${port}`;
   }
   
   console.log('Production mode - using same origin for API:', window.location.origin);
@@ -102,7 +106,12 @@ export const trpcClient = createTRPCClient<AppRouter>({
             const clonedResponse = response.clone();
             const text = await clonedResponse.text();
             console.error('Received HTML response instead of JSON:', text.substring(0, 200));
-            throw new Error('Backend server is not responding correctly. Please check if the server is running.');
+            console.error('\n⚠️  BACKEND NOT RUNNING!');
+            console.error('Please start the backend server:');
+            console.error('  Option 1: bash dev.sh');
+            console.error('  Option 2: bun run server.ts');
+            console.error('See QUICK_START.md for details.\n');
+            throw new Error('Backend server is not running. Please start it with: bash dev.sh');
           }
           
           return response;
