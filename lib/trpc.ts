@@ -110,6 +110,8 @@ export const trpcClient = createTRPCClient<AppRouter>({
             const clonedResponse = response.clone();
             const text = await clonedResponse.text();
             console.error('tRPC error response:', text.substring(0, 500));
+            console.error('Full URL that failed:', url);
+            console.error('Request body:', options?.body);
             
             if (text.includes('ngrok')) {
               throw new Error('Backend is using ngrok which is not running. Please deploy to Vercel or start local backend.');
@@ -117,6 +119,15 @@ export const trpcClient = createTRPCClient<AppRouter>({
             
             if (response.status === 503) {
               throw new Error('Backend service unavailable (503). Please check your Vercel deployment.');
+            }
+            
+            if (response.status === 404) {
+              console.error('404 Error - tRPC endpoint not found');
+              console.error('This usually means:');
+              console.error('1. Vercel deployment is incomplete');
+              console.error('2. API routes are not properly configured');
+              console.error('3. The /api/trpc path is not being routed correctly');
+              throw new Error('tRPC endpoint not found (404). Please check Vercel deployment and ensure the API is properly deployed.');
             }
             
             throw new Error(`Backend error (${response.status}): ${text.substring(0, 100)}`);
