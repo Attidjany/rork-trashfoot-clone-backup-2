@@ -23,7 +23,7 @@ app.use('*', cors({
 }));
 
 app.use(
-  '/api/trpc/*',
+  '/trpc/*',
   trpcServer({
     router: appRouter,
     createContext,
@@ -34,13 +34,8 @@ app.use(
   })
 );
 
-app.get('/api', (c) => {
+app.get('/', (c) => {
   console.log('Health check hit');
-  return c.json({ status: 'ok', message: 'API is running', timestamp: new Date().toISOString() });
-});
-
-app.get('/api/', (c) => {
-  console.log('Health check hit with trailing slash');
   return c.json({ status: 'ok', message: 'API is running', timestamp: new Date().toISOString() });
 });
 
