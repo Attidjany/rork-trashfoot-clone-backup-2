@@ -49,14 +49,11 @@ export default function AuthScreen() {
   const registerMutation = trpc.auth.register.useMutation();
   
 
-
-  // Check gamer handle availability with debounce
   useEffect(() => {
     if (mode === 'signup' && gamerHandle.length >= 3) {
       const timeoutId = setTimeout(async () => {
         setCheckingHandle(true);
         try {
-          // For now, simulate handle checking
           const takenHandles = ['striker_alex', 'goal_machine', 'football_king', 'super_admin'];
           const isAvailable = !takenHandles.includes(gamerHandle.toLowerCase());
           setHandleAvailable(isAvailable);
@@ -124,16 +121,11 @@ export default function AuthScreen() {
         
         console.log('Signup successful:', result.user.name);
         
-        if (result.requiresEmailConfirmation) {
-          Alert.alert(
-            'Check Your Email',
-            'We sent you a confirmation email. Please check your inbox and click the confirmation link to activate your account.',
-            [{ text: 'OK', onPress: () => setMode('login') }]
-          );
-        } else {
-          setLoggedInUser(result.user);
-          router.replace('/(tabs)/home');
-        }
+        Alert.alert(
+          'Check Your Email',
+          'We sent you a confirmation email. Please check your inbox and click the confirmation link to activate your account before logging in.',
+          [{ text: 'OK', onPress: () => setMode('login') }]
+        );
       } else {
         console.log('Attempting backend login...');
         
@@ -209,7 +201,6 @@ export default function AuthScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-          {/* Logo Section */}
           <View style={styles.logoSection}>
             <View style={styles.logoContainer}>
               <View style={styles.logoIcon}>
@@ -220,7 +211,6 @@ export default function AuthScreen() {
             <Text style={styles.tagline}>Track Your Football Matches</Text>
           </View>
 
-          {/* Auth Form */}
           <View style={styles.formContainer}>
             <View style={styles.modeSelector}>
               <TouchableOpacity
@@ -337,6 +327,11 @@ export default function AuthScreen() {
               </Text>
             </TouchableOpacity>
 
+            {mode === 'signup' && (
+              <Text style={styles.infoText}>
+                You&apos;ll receive a confirmation email after signing up. Please verify your email before logging in.
+              </Text>
+            )}
           </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -453,60 +448,6 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#fff',
   },
-  forgotPassword: {
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  forgotPasswordText: {
-    fontSize: 14,
-    color: '#0EA5E9',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 32,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#334155',
-  },
-  dividerText: {
-    fontSize: 14,
-    color: '#64748B',
-    marginHorizontal: 16,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  socialButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  socialButtonText: {
-    fontSize: 16,
-    fontWeight: '500' as const,
-    color: '#fff',
-    marginLeft: 8,
-  },
-  guestButton: {
-    alignItems: 'center',
-    marginTop: 24,
-    paddingVertical: 16,
-  },
-  guestButtonText: {
-    fontSize: 16,
-    color: '#64748B',
-    textDecorationLine: 'underline',
-  },
   inputError: {
     borderColor: '#EF4444',
   },
@@ -535,67 +476,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0EA5E9',
   },
-  demoCredentials: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  demoTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#0EA5E9',
-    marginBottom: 12,
-  },
-  demoAccount: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#0F172A',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  demoAccountText: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-    color: '#fff',
-    marginBottom: 2,
-  },
-  demoCredText: {
-    fontSize: 12,
+  infoText: {
+    fontSize: 13,
     color: '#64748B',
-  },
-  loginMethodSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-    gap: 4,
-  },
-  methodButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  activeMethodButton: {
-    backgroundColor: '#0EA5E9',
-  },
-  methodText: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-    color: '#64748B',
-  },
-  activeMethodText: {
-    color: '#fff',
-  },
-  phoneIcon: {
-    fontSize: 20,
-    marginRight: 12,
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
   },
 });

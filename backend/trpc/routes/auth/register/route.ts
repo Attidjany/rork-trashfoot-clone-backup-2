@@ -39,6 +39,10 @@ export const registerProcedure = publicProcedure
         email,
         password,
         email_confirm: false,
+        user_metadata: {
+          name,
+          gamer_handle: gamerHandle,
+        },
       });
       
       if (authError || !authData.user) {
@@ -83,7 +87,7 @@ export const registerProcedure = publicProcedure
         console.error('Stats creation error:', statsError);
       }
       
-      const requiresEmailConfirmation = !authData.user.email_confirmed_at;
+      const requiresEmailConfirmation = true;
       
       const user: Player = {
         id: player.id,
