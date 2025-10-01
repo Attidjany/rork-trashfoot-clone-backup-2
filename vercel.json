@@ -1,11 +1,11 @@
 {
   "buildCommand": "npm run build:web",
-  "installCommand": "npm install --legacy-peer-deps",
+  "installCommand": "npm install --legacy-peer-deps && npm install ajv@^8.12.0 --legacy-peer-deps",
   "outputDirectory": "dist",
   "framework": null,
   "functions": {
     "api/index.ts": {
-      "runtime": "nodejs20.x"
+      "runtime": "@vercel/node@3.2.17"
     }
   },
   "rewrites": [
