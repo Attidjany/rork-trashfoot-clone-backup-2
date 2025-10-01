@@ -5,7 +5,7 @@ import { cors } from 'hono/cors';
 import { appRouter } from '../backend/trpc/app-router';
 import { createContext } from '../backend/trpc/create-context';
 
-const app = new Hono();
+const app = new Hono().basePath('/api');
 
 app.use('*', cors({
   origin: (origin) => {
@@ -35,15 +35,15 @@ app.use(
 );
 
 app.get('/', (c) => {
-  console.log('Health check hit');
+  console.log('Health check hit at /api/');
   return c.json({ status: 'ok', message: 'API is running', timestamp: new Date().toISOString() });
 });
 
 app.all('*', (c) => {
-  console.log('Unhandled request:', c.req.method, c.req.url);
-  return c.json({ error: 'Not Found', path: c.req.url }, 404);
+  console.log('Unhandled request:', c.req.method, c.req.url, 'path:', c.req.path);
+  return c.json({ error: 'Not Found', path: c.req.path, url: c.req.url }, 404);
 });
 
-console.log('API handler loaded and configured');
+console.log('API handler loaded and configured with base path /api');
 
 export default handle(app);
