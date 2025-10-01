@@ -161,12 +161,18 @@ export default function AuthScreen() {
       }
     } catch (error: any) {
       console.error('=== AUTH ERROR ===');
+      console.error('Error type:', typeof error);
       console.error('Error:', error);
+      console.error('Error message:', error?.message);
+      console.error('Error data:', error?.data);
+      console.error('Error shape:', error?.shape);
       
       let errorMessage = 'Authentication failed. Please try again.';
       
-      // Handle different types of errors
-      if (error?.message) {
+      // Handle tRPC errors
+      if (error?.shape?.message) {
+        errorMessage = error.shape.message;
+      } else if (error?.message) {
         errorMessage = error.message;
       } else if (typeof error === 'string') {
         errorMessage = error;
@@ -176,6 +182,7 @@ export default function AuthScreen() {
         errorMessage = 'Authentication failed. Please try again.';
       }
       
+      console.error('Final error message:', errorMessage);
       Alert.alert('Authentication Failed', errorMessage);
     } finally {
       setIsLoading(false);

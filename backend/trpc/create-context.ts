@@ -13,6 +13,20 @@ export type Context = Awaited<ReturnType<typeof createContext>>;
 // Initialize tRPC
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    console.error('tRPC Error:', {
+      code: error.code,
+      message: error.message,
+      cause: error.cause,
+    });
+    return {
+      ...shape,
+      data: {
+        ...shape.data,
+        zodError: error.cause instanceof Error ? error.cause.message : null,
+      },
+    };
+  },
 });
 
 export const createTRPCRouter = t.router;

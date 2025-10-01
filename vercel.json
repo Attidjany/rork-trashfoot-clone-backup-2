@@ -1,11 +1,11 @@
 {
-  "buildCommand": "npm run vercel-build",
+  "buildCommand": "npm run build:web",
   "installCommand": "npm install --legacy-peer-deps",
   "outputDirectory": "dist",
   "framework": null,
   "functions": {
     "api/index.ts": {
-      "runtime": "@vercel/node@3.2.17"
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [

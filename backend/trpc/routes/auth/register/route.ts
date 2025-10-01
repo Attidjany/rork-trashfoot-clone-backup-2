@@ -174,6 +174,8 @@ export const registerProcedure = publicProcedure
       };
     } catch (error) {
       console.error('Registration error:', error);
-      throw new Error(error instanceof Error ? error.message : 'Registration failed');
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      console.error('Throwing error:', errorMessage);
+      throw new Error(errorMessage);
     }
   });

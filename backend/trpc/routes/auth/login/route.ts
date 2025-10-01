@@ -334,6 +334,8 @@ export const loginProcedure = publicProcedure
       };
     } catch (error) {
       console.error('Login procedure error:', error);
-      throw new Error(error instanceof Error ? error.message : 'Login failed');
+      const errorMessage = error instanceof Error ? error.message : 'Login failed';
+      console.error('Throwing error:', errorMessage);
+      throw new Error(errorMessage);
     }
   });
