@@ -157,7 +157,7 @@ export default function AuthScreen() {
       setHandleAvailable(null);
       setHandleSuggestions([]);
     }
-  }, [gamerHandle, mode, checkHandleMutation]);
+  }, [gamerHandle, mode]);
 
   const handleAuth = async () => {
     console.log('=== handleAuth called ===');
