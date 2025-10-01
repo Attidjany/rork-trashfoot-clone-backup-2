@@ -4,20 +4,17 @@ import type { AppRouter } from '@/backend/trpc/app-router';
 import superjson from 'superjson';
 
 const getBaseUrl = () => {
-  // For mobile/native, use the environment variable or localhost
   if (typeof window === 'undefined') {
     return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
   }
   
-  // For web
   const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   
   if (isDev) {
-    // In development, always use port 3001 for backend
     return 'http://localhost:3001';
   }
   
-  // In production (Vercel), backend is on same origin
+  console.log('Production mode - using same origin for API:', window.location.origin);
   return window.location.origin;
 };
 
@@ -72,6 +69,8 @@ export const trpcClient = createTRPCClient<AppRouter>({
       fetch: async (url, options) => {
         try {
           console.log('tRPC fetch to:', url);
+          console.log('Request method:', options?.method);
+          console.log('Request headers:', options?.headers);
           
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -87,12 +86,21 @@ export const trpcClient = createTRPCClient<AppRouter>({
           
           clearTimeout(timeoutId);
           
-          console.log('tRPC response status:', response.status, 'content-type:', response.headers.get('content-type'));
+          console.log('tRPC response status:', response.status);
+          console.log('tRPC response content-type:', response.headers.get('content-type'));
           
-          // Check if response is HTML (error page)
           const contentType = response.headers.get('content-type');
+          
+          if (!response.ok) {
+            const clonedResponse = response.clone();
+            const text = await clonedResponse.text();
+            console.error('tRPC error response:', text.substring(0, 500));
+            throw new Error(`Backend error (${response.status}): ${text.substring(0, 100)}`);
+          }
+          
           if (contentType && contentType.includes('text/html')) {
-            const text = await response.text();
+            const clonedResponse = response.clone();
+            const text = await clonedResponse.text();
             console.error('Received HTML response instead of JSON:', text.substring(0, 200));
             throw new Error('Backend server is not responding correctly. Please check if the server is running.');
           }
@@ -100,7 +108,6 @@ export const trpcClient = createTRPCClient<AppRouter>({
           return response;
         } catch (error) {
           console.error('tRPC fetch error:', error);
-          // Mark backend as unavailable for future requests
           backendAvailable = false;
           throw error;
         }
