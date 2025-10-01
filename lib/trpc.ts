@@ -4,12 +4,19 @@ import type { AppRouter } from '@/backend/trpc/app-router';
 import superjson from 'superjson';
 
 const getBaseUrl = () => {
+  // Always use the backend server URL
   if (typeof window !== 'undefined') {
-    // In the browser, use the current origin
+    // In development, backend runs on port 3001
+    // In production (Vercel), it's on the same origin at /api
+    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isDev) {
+      return 'http://localhost:3001';
+    }
+    // In production, use the same origin
     return window.location.origin;
   }
   // For SSR/mobile, use environment variable or default
-  return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+  return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
 };
 
 // Check if backend is available
