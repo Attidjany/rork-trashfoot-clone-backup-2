@@ -8,15 +8,15 @@ const getBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_URL || 'https://trashfoot.vercel.app';
   }
   
-  console.log('Using same origin for API:', window.location.origin);
-  return window.location.origin;
+  const origin = window.location.origin;
+  console.log('Using same origin for API:', origin);
+  return origin;
 };
 
-// Check if backend is available
-let backendAvailable = false;
 const checkBackend = async () => {
   try {
     const baseUrl = getBaseUrl();
+    console.log('\n=== BACKEND HEALTH CHECK ===');
     console.log('Checking backend at:', `${baseUrl}/api/`);
     
     const controller = new AbortController();
@@ -29,25 +29,46 @@ const checkBackend = async () => {
     
     clearTimeout(timeoutId);
     
-    backendAvailable = response.ok;
+    const contentType = response.headers.get('content-type');
     const responseText = await response.text();
     
     console.log('Backend check response:', {
       ok: response.ok,
       status: response.status,
-      contentType: response.headers.get('content-type'),
-      responseText: responseText.substring(0, 200)
+      contentType,
+      responsePreview: responseText.substring(0, 200)
     });
     
+    if (response.ok && contentType?.includes('application/json')) {
+      console.log('✅ Backend is healthy and responding correctly');
+      return true;
+    } else {
+      console.error('❌ Backend is not responding correctly');
+      console.error('Expected JSON response, got:', contentType);
+      return false;
+    }
+    
   } catch (error) {
-    backendAvailable = false;
-    console.log('Backend not available:', error);
+    console.error('❌ Backend health check failed:', error);
+    return false;
   }
 };
 
-// Check backend availability on startup
 if (typeof window !== 'undefined') {
-  checkBackend();
+  checkBackend().then(isHealthy => {
+    if (!isHealthy) {
+      console.error('\n⚠️  BACKEND ISSUE DETECTED!');
+      console.error('The backend API is not responding correctly.');
+      console.error('\nPossible causes:');
+      console.error('  1. Vercel deployment failed or is still deploying');
+      console.error('  2. API function has errors (check Vercel logs)');
+      console.error('  3. Environment variables not set correctly');
+      console.error('\nTo fix:');
+      console.error('  1. Check Vercel deployment status');
+      console.error('  2. Visit https://trashfoot.vercel.app/api/ to test the API');
+      console.error('  3. Check Vercel function logs for errors\n');
+    }
+  });
 }
 
 const trpcUrl = `${getBaseUrl()}/api/trpc`;
@@ -89,6 +110,15 @@ export const trpcClient = createTRPCClient<AppRouter>({
             const clonedResponse = response.clone();
             const text = await clonedResponse.text();
             console.error('tRPC error response:', text.substring(0, 500));
+            
+            if (text.includes('ngrok')) {
+              throw new Error('Backend is using ngrok which is not running. Please deploy to Vercel or start local backend.');
+            }
+            
+            if (response.status === 503) {
+              throw new Error('Backend service unavailable (503). Please check your Vercel deployment.');
+            }
+            
             throw new Error(`Backend error (${response.status}): ${text.substring(0, 100)}`);
           }
           
@@ -96,18 +126,29 @@ export const trpcClient = createTRPCClient<AppRouter>({
             const clonedResponse = response.clone();
             const text = await clonedResponse.text();
             console.error('Received HTML response instead of JSON:', text.substring(0, 200));
-            console.error('\n⚠️  BACKEND NOT RUNNING!');
-            console.error('Please start the backend server:');
-            console.error('  Option 1: bash dev.sh');
-            console.error('  Option 2: bun run server.ts');
-            console.error('See QUICK_START.md for details.\n');
-            throw new Error('Backend server is not running. Please start it with: bash dev.sh');
+            
+            if (text.includes('ngrok')) {
+              console.error('\n⚠️  NGROK NOT RUNNING!');
+              console.error('Your backend is configured to use ngrok but it\'s not running.');
+              console.error('Options:');
+              console.error('  1. Start ngrok and update EXPO_PUBLIC_API_URL');
+              console.error('  2. Deploy to Vercel (recommended)');
+              console.error('  3. Use local development: bash dev.sh\n');
+              throw new Error('Backend ngrok tunnel is not running. Please deploy to Vercel or start local backend.');
+            }
+            
+            console.error('\n⚠️  BACKEND NOT RESPONDING!');
+            console.error('The backend is returning HTML instead of JSON.');
+            console.error('This usually means:');
+            console.error('  1. Backend is not deployed to Vercel');
+            console.error('  2. Vercel deployment failed');
+            console.error('  3. API routes are not configured correctly\n');
+            throw new Error('Backend is not responding correctly. Please check Vercel deployment.');
           }
           
           return response;
         } catch (error) {
           console.error('tRPC fetch error:', error);
-          backendAvailable = false;
           throw error;
         }
       },
