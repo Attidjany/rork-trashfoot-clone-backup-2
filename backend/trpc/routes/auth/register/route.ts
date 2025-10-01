@@ -43,7 +43,7 @@ export const registerProcedure = publicProcedure
             name,
             gamer_handle: gamerHandle,
           },
-          emailRedirectTo: undefined,
+          emailRedirectTo: 'https://trashfoot.vercel.app/auth',
         },
       });
       
