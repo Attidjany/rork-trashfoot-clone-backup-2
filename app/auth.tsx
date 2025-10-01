@@ -26,11 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { trpc } from '@/lib/trpc';
-import { supabaseClient } from '@/lib/supabase';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 
-WebBrowser.maybeCompleteAuthSession();
 
 type AuthMode = 'login' | 'signup';
 
@@ -52,88 +48,9 @@ export default function AuthScreen() {
   
   const loginMutation = trpc.auth.login.useMutation();
   const registerMutation = trpc.auth.register.useMutation();
-  const oauthLoginMutation = trpc.auth.oauthLogin.useMutation();
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
   
-  const handleGoogleSignIn = async () => {
-    try {
-      setIsLoading(true);
-      console.log('Starting Google OAuth...');
-      
-      const redirectUrl = Linking.createURL('auth/callback');
-      console.log('Redirect URL:', redirectUrl);
-      
-      const { data, error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: Platform.OS !== 'web',
-        },
-      });
-      
-      if (error) {
-        console.error('OAuth error:', error);
-        Alert.alert('Error', error.message || 'Failed to sign in with Google');
-        return;
-      }
-      
-      if (Platform.OS === 'web') {
-        return;
-      }
-      
-      if (!data?.url) {
-        Alert.alert('Error', 'Failed to get OAuth URL');
-        return;
-      }
-      
-      console.log('Opening OAuth URL:', data.url);
-      const result = await WebBrowser.openAuthSessionAsync(
-        data.url,
-        redirectUrl
-      );
-      
-      if (result.type === 'success') {
-        const url = result.url;
-        const params = new URL(url).searchParams;
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        
-        if (accessToken && refreshToken) {
-          const { data: sessionData, error: sessionError } = await supabaseClient.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          
-          if (sessionError || !sessionData.user) {
-            console.error('Session error:', sessionError);
-            Alert.alert('Error', 'Failed to complete sign in');
-            return;
-          }
-          
-          console.log('OAuth successful, user:', sessionData.user.email);
-          
-          const result = await oauthLoginMutation.mutateAsync({
-            authUserId: sessionData.user.id,
-            email: sessionData.user.email!,
-            name: sessionData.user.user_metadata?.full_name || sessionData.user.user_metadata?.name,
-          });
-          
-          if (result.gameData) {
-            setLoggedInUser(result.user, result.gameData);
-          } else {
-            setLoggedInUser(result.user);
-          }
-          
-          router.replace('/(tabs)/home');
-        }
-      }
-    } catch (error: any) {
-      console.error('Google sign in error:', error);
-      Alert.alert('Error', error?.message || 'Failed to sign in with Google');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
 
   useEffect(() => {
     if (mode === 'signup' && gamerHandle.length >= 3) {
@@ -422,23 +339,7 @@ export default function AuthScreen() {
               </Text>
             </TouchableOpacity>
 
-            {mode === 'login' && (
-              <>
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.dividerLine} />
-                </View>
 
-                <TouchableOpacity
-                  style={[styles.googleButton, isLoading && styles.authButtonDisabled]}
-                  onPress={handleGoogleSignIn}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
-                </TouchableOpacity>
-              </>
-            )}
 
             {mode === 'signup' && (
               <Text style={styles.infoText}>
@@ -597,33 +498,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 8,
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#334155',
-  },
-  dividerText: {
-    color: '#64748B',
-    paddingHorizontal: 16,
-    fontSize: 14,
-    fontWeight: '500' as const,
-  },
-  googleButton: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  googleButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#1E293B',
-  },
+
 });

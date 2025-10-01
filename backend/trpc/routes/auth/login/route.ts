@@ -199,37 +199,6 @@ export const loginProcedure = publicProcedure
       const email = input.email.trim();
       const password = input.password.trim();
       
-      let authData: any = null;
-      
-      if (password) {
-        const { data, error: authError } = await supabaseAdmin.auth.signInWithPassword({
-          email,
-          password,
-        });
-        
-        if (authError || !data.user || !data.session) {
-          console.error('Auth error:', authError);
-          const errorMsg = authError?.message || 'Invalid email or password';
-          if (errorMsg.includes('Email not confirmed')) {
-            throw new Error('Please confirm your email address before logging in. Check your inbox for the confirmation link.');
-          }
-          throw new Error(errorMsg);
-        }
-        
-        authData = data;
-      } else {
-        const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-        const user = users?.users.find(u => u.email === email);
-        
-        if (!user) {
-          throw new Error('User not found');
-        }
-        
-        authData = { user, session: null };
-      }
-      
-      console.log('Auth successful for user:', authData.user.id);
-      
       const { data: player, error: playerError } = await supabaseAdmin
         .from('players')
         .select('*')
@@ -238,9 +207,33 @@ export const loginProcedure = publicProcedure
       
       if (playerError || !player) {
         console.error('Player not found:', playerError);
-        throw new Error('Player profile not found');
+        throw new Error('Invalid email or password');
       }
       
+      const { data: authUser } = await supabaseAdmin.auth.admin.listUsers();
+      const authUserData = authUser?.users.find(u => u.email === email);
+      
+      if (!authUserData) {
+        console.error('Auth user not found for email:', email);
+        throw new Error('Invalid email or password');
+      }
+      
+      if (authUserData.email_confirmed_at === null) {
+        console.error('Email not confirmed for:', email);
+        throw new Error('Please confirm your email address before logging in. Check your inbox for the confirmation link.');
+      }
+      
+      const { error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (signInError) {
+        console.error('Sign in error:', signInError);
+        throw new Error('Invalid email or password');
+      }
+      
+      console.log('Auth successful for user:', authUserData.id);
       console.log('Player found:', player.id);
       
       const { data: globalStats } = await supabaseAdmin
@@ -311,7 +304,7 @@ export const loginProcedure = publicProcedure
       
       return {
         user,
-        token: authData.session?.access_token || '',
+        token: '',
         gameData,
         message: "Login successful!",
       };
