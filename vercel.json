@@ -4,7 +4,7 @@
   "outputDirectory": "dist",
   "framework": null,
   "functions": {
-    "api/index.ts": {
+    "api/**/*.ts": {
       "runtime": "nodejs20.x"
     }
   },
