@@ -184,82 +184,78 @@ async function fetchGroupMessages(groupIds: string[]): Promise<ChatMessage[]> {
   }));
 }
 
-export const loginProcedure = publicProcedure
+export const oauthLoginProcedure = publicProcedure
   .input(
     z.object({
-      email: z.string().email("Invalid email address"),
-      password: z.string(),
+      authUserId: z.string(),
+      email: z.string().email(),
+      name: z.string().optional(),
     })
   )
   .mutation(async ({ input }) => {
     try {
-      console.log('=== LOGIN ATTEMPT ===');
+      console.log('=== OAUTH LOGIN ATTEMPT ===');
+      console.log('Auth User ID:', input.authUserId);
       console.log('Email:', input.email);
       
-      const email = input.email.trim();
-      const password = input.password.trim();
-      
-      let authData: any = null;
-      
-      if (password) {
-        const { data, error: authError } = await supabaseAdmin.auth.signInWithPassword({
-          email,
-          password,
-        });
-        
-        if (authError || !data.user || !data.session) {
-          console.error('Auth error:', authError);
-          const errorMsg = authError?.message || 'Invalid email or password';
-          if (errorMsg.includes('Email not confirmed')) {
-            throw new Error('Please confirm your email address before logging in. Check your inbox for the confirmation link.');
-          }
-          throw new Error(errorMsg);
-        }
-        
-        authData = data;
-      } else {
-        const { data: users } = await supabaseAdmin.auth.admin.listUsers();
-        const user = users?.users.find(u => u.email === email);
-        
-        if (!user) {
-          throw new Error('User not found');
-        }
-        
-        authData = { user, session: null };
-      }
-      
-      console.log('Auth successful for user:', authData.user.id);
-      
-      const { data: player, error: playerError } = await supabaseAdmin
+      let player = await supabaseAdmin
         .from('players')
         .select('*')
-        .eq('email', email)
+        .eq('auth_user_id', input.authUserId)
         .single();
       
-      if (playerError || !player) {
-        console.error('Player not found:', playerError);
-        throw new Error('Player profile not found');
+      if (!player.data) {
+        console.log('Player not found, creating new profile...');
+        
+        const gamerHandle = input.email.split('@')[0] + '_' + Math.random().toString(36).substring(2, 6);
+        
+        const { data: newPlayer, error: createError } = await supabaseAdmin
+          .from('players')
+          .insert({
+            auth_user_id: input.authUserId,
+            name: input.name || input.email.split('@')[0],
+            gamer_handle: gamerHandle,
+            email: input.email,
+            role: 'player',
+            status: 'active',
+          })
+          .select()
+          .single();
+        
+        if (createError || !newPlayer) {
+          console.error('Failed to create player:', createError);
+          throw new Error('Failed to create player profile');
+        }
+        
+        await supabaseAdmin
+          .from('player_stats')
+          .insert({
+            player_id: newPlayer.id,
+            group_id: null,
+          });
+        
+        player.data = newPlayer;
       }
       
-      console.log('Player found:', player.id);
+      const playerData = player.data;
       
       const { data: globalStats } = await supabaseAdmin
         .from('player_stats')
         .select('*')
-        .eq('player_id', player.id)
+        .eq('player_id', playerData.id)
         .is('group_id', null)
         .single();
       
       const user: Player = {
-        id: player.id,
-        name: player.name,
-        gamerHandle: player.gamer_handle,
-        email: player.email,
-        avatar: player.avatar || undefined,
-        role: player.role as 'player' | 'admin' | 'super_admin',
-        status: player.status as 'active' | 'suspended' | 'banned',
-        suspendedUntil: player.suspended_until || undefined,
-        joinedAt: player.joined_at,
+        id: playerData.id,
+        name: playerData.name,
+        gamerHandle: playerData.gamer_handle,
+        email: playerData.email,
+        avatar: playerData.avatar || undefined,
+        role: playerData.role as 'player' | 'admin' | 'super_admin',
+        status: playerData.status as 'active' | 'suspended' | 'banned',
+        suspendedUntil: playerData.suspended_until || undefined,
+        joinedAt: playerData.joined_at,
         stats: globalStats ? {
           played: globalStats.played,
           wins: globalStats.wins,
@@ -289,13 +285,9 @@ export const loginProcedure = publicProcedure
         },
       };
       
-      console.log('Fetching user groups...');
-      const groups = await fetchUserGroups(player.id);
-      console.log('Found', groups.length, 'groups');
-      
+      const groups = await fetchUserGroups(playerData.id);
       const groupIds = groups.map(g => g.id);
       const messages = await fetchGroupMessages(groupIds);
-      console.log('Found', messages.length, 'messages');
       
       const gameData = {
         currentUser: user,
@@ -304,21 +296,17 @@ export const loginProcedure = publicProcedure
         messages,
       };
       
-      console.log('=== LOGIN SUCCESS ===');
+      console.log('=== OAUTH LOGIN SUCCESS ===');
       console.log('User:', user.name, '(' + user.email + ')');
-      console.log('Role:', user.role);
-      console.log('Groups:', groups.length);
       
       return {
         user,
-        token: authData.session?.access_token || '',
         gameData,
         message: "Login successful!",
       };
     } catch (error) {
-      console.error('Login procedure error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Login failed';
-      console.error('Throwing error:', errorMessage);
+      console.error('OAuth login error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'OAuth login failed';
       throw new Error(errorMessage);
     }
   });

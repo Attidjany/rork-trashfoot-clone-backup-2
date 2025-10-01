@@ -2,6 +2,7 @@ import { createTRPCRouter } from "./create-context";
 import { hiProcedure } from "./routes/example/hi/route";
 import { registerProcedure } from "./routes/auth/register/route";
 import { loginProcedure } from "./routes/auth/login/route";
+import { oauthLoginProcedure } from "./routes/auth/oauth-login/route";
 import { checkGamerHandleProcedure } from "./routes/auth/check-handle/route";
 import { saveUserDataProcedure } from "./routes/auth/save-data/route";
 import { getPublicGroupsProcedure, requestJoinGroupProcedure, manageGroupMemberProcedure } from "./routes/groups/management/route";
@@ -14,6 +15,7 @@ export const appRouter = createTRPCRouter({
   auth: createTRPCRouter({
     register: registerProcedure,
     login: loginProcedure,
+    oauthLogin: oauthLoginProcedure,
     checkGamerHandle: checkGamerHandleProcedure,
     saveData: saveUserDataProcedure,
   }),
