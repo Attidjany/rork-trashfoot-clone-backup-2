@@ -1,0 +1,11 @@
+node_modules
+.expo
+.expo-shared
+dist
+*.log
+.DS_Store
+.env.local
+.env.*.local
+bun.lock
+server.ts
+dev.sh
