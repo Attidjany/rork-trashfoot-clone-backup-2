@@ -1,14 +1,15 @@
 {
-  "installCommand": "bun install",
-  "buildCommand": "npx expo export --platform web --output-dir dist",
+  "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "framework": null,
   "functions": {
     "api/index.ts": {
-      "runtime": "@vercel/node@3.0.0"
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
