@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build:web",
+  "buildCommand": "npm run vercel-build",
   "installCommand": "npm install --legacy-peer-deps",
   "outputDirectory": "dist",
   "framework": null,
