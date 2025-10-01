@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { 
@@ -16,8 +15,6 @@ import {
   User, 
   Eye, 
   EyeOff,
-  Apple,
-  Chrome,
   Gamepad2,
   CheckCircle,
   XCircle,
@@ -29,7 +26,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { trpc } from '@/lib/trpc';
 
 type AuthMode = 'login' | 'signup';
-type LoginMethod = 'email' | 'phone';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -37,9 +33,7 @@ export default function AuthScreen() {
   const { setLoggedInUser } = useGameStore();
   
   const [mode, setMode] = useState<AuthMode>('login');
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [gamerHandle, setGamerHandle] = useState('');
@@ -84,12 +78,8 @@ export default function AuthScreen() {
   }, [gamerHandle, mode]);
 
   const handleAuth = async () => {
-    if (loginMethod === 'email' && !email.trim()) {
+    if (!email.trim()) {
       Alert.alert('Error', 'Please enter your email');
-      return;
-    }
-    if (loginMethod === 'phone' && !phone.trim()) {
-      Alert.alert('Error', 'Please enter your phone number');
       return;
     }
     if (!password.trim()) {
@@ -115,17 +105,14 @@ export default function AuthScreen() {
     setIsLoading(true);
     console.log('=== AUTH ATTEMPT ===');
     console.log('Mode:', mode);
-    console.log('Login Method:', loginMethod);
     console.log('Email:', email.trim());
-    console.log('Phone:', phone.trim());
 
     try {
       if (mode === 'signup') {
         const result = await registerMutation.mutateAsync({
           name: name.trim(),
           gamerHandle: gamerHandle.trim(),
-          email: loginMethod === 'email' ? email.trim() : undefined,
-          phone: loginMethod === 'phone' ? phone.trim() : undefined,
+          email: email.trim(),
           password: password.trim(),
         });
         
@@ -137,8 +124,7 @@ export default function AuthScreen() {
         console.log('Attempting backend login...');
         
         const result = await loginMutation.mutateAsync({
-          email: loginMethod === 'email' ? email.trim() : undefined,
-          phone: loginMethod === 'phone' ? phone.trim() : undefined,
+          email: email.trim(),
           password: password.trim(),
         });
         
@@ -189,9 +175,7 @@ export default function AuthScreen() {
     }
   };
 
-  const handleSocialAuth = (provider: 'apple' | 'google') => {
-    console.log(`${provider === 'apple' ? 'Apple' : 'Google'} Sign-In will be available in a future update.`);
-  };
+
 
   return (
     <View style={styles.container}>
@@ -240,28 +224,6 @@ export default function AuthScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-
-            {mode === 'login' && (
-              <View style={styles.loginMethodSelector}>
-                <TouchableOpacity
-                  style={[styles.methodButton, loginMethod === 'email' && styles.activeMethodButton]}
-                  onPress={() => setLoginMethod('email')}
-                >
-                  <Mail size={16} color={loginMethod === 'email' ? '#fff' : '#64748B'} />
-                  <Text style={[styles.methodText, loginMethod === 'email' && styles.activeMethodText]}>
-                    Email
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.methodButton, loginMethod === 'phone' && styles.activeMethodButton]}
-                  onPress={() => setLoginMethod('phone')}
-                >
-                  <Text style={[styles.methodText, loginMethod === 'phone' && styles.activeMethodText]}>
-                    📱 Phone
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
 
             {mode === 'signup' && (
               <>
@@ -312,37 +274,19 @@ export default function AuthScreen() {
               </>
             )}
 
-            {(mode === 'signup' || loginMethod === 'email') && (
-              <View style={styles.inputContainer}>
-                <Mail size={20} color="#64748B" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor="#64748B"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-            )}
-
-            {mode === 'login' && loginMethod === 'phone' && (
-              <View style={styles.inputContainer}>
-                <Text style={styles.phoneIcon}>📱</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Phone Number (e.g., +1234567890)"
-                  placeholderTextColor="#64748B"
-                  value={phone}
-                  onChangeText={setPhone}
-                  keyboardType="phone-pad"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-            )}
+            <View style={styles.inputContainer}>
+              <Mail size={20} color="#64748B" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#64748B"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
 
             <View style={styles.inputContainer}>
               <Lock size={20} color="#64748B" style={styles.inputIcon} />
@@ -376,40 +320,6 @@ export default function AuthScreen() {
                 {isLoading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Account'}
               </Text>
             </TouchableOpacity>
-
-            {mode === 'login' && (
-              <TouchableOpacity style={styles.forgotPassword}>
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Social Auth */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or continue with</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <View style={styles.socialButtons}>
-              {Platform.OS === 'ios' && (
-                <TouchableOpacity
-                  style={styles.socialButton}
-                  onPress={() => handleSocialAuth('apple')}
-                >
-                  <Apple size={24} color="#fff" />
-                  <Text style={styles.socialButtonText}>Apple</Text>
-                </TouchableOpacity>
-              )}
-              
-              <TouchableOpacity
-                style={styles.socialButton}
-                onPress={() => handleSocialAuth('google')}
-              >
-                <Chrome size={24} color="#fff" />
-                <Text style={styles.socialButtonText}>Google</Text>
-              </TouchableOpacity>
-            </View>
-
 
           </View>
         </ScrollView>
