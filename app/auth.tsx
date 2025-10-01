@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { 
@@ -100,6 +102,10 @@ export default function AuthScreen() {
         Alert.alert('Error', 'Gamer handle is not available');
         return;
       }
+      if (password.length < 6) {
+        Alert.alert('Error', 'Password must be at least 6 characters');
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -117,9 +123,17 @@ export default function AuthScreen() {
         });
         
         console.log('Signup successful:', result.user.name);
-        setLoggedInUser(result.user);
-        console.log('Signup successful, navigating to home');
-        router.replace('/(tabs)/home');
+        
+        if (result.requiresEmailConfirmation) {
+          Alert.alert(
+            'Check Your Email',
+            'We sent you a confirmation email. Please check your inbox and click the confirmation link to activate your account.',
+            [{ text: 'OK', onPress: () => setMode('login') }]
+          );
+        } else {
+          setLoggedInUser(result.user);
+          router.replace('/(tabs)/home');
+        }
       } else {
         console.log('Attempting backend login...');
         
@@ -155,7 +169,6 @@ export default function AuthScreen() {
       
       let errorMessage = 'Authentication failed. Please try again.';
       
-      // Handle tRPC errors
       if (error?.shape?.message) {
         errorMessage = error.shape.message;
       } else if (error?.message) {
@@ -164,8 +177,6 @@ export default function AuthScreen() {
         errorMessage = error;
       } else if (error?.data?.message) {
         errorMessage = error.data.message;
-      } else {
-        errorMessage = 'Authentication failed. Please try again.';
       }
       
       console.error('Final error message:', errorMessage);
@@ -189,10 +200,15 @@ export default function AuthScreen() {
         colors={['#0F172A', '#1E293B']}
         style={[styles.gradient, { paddingTop: insets.top }]}
       >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
         >
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           {/* Logo Section */}
           <View style={styles.logoSection}>
             <View style={styles.logoContainer}>
@@ -322,7 +338,8 @@ export default function AuthScreen() {
             </TouchableOpacity>
 
           </View>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </LinearGradient>
     </View>
   );
@@ -333,6 +350,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   gradient: {
+    flex: 1,
+  },
+  keyboardView: {
     flex: 1,
   },
   scrollContent: {

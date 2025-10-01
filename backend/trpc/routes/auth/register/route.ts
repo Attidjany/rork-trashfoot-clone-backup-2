@@ -8,11 +8,8 @@ export const registerProcedure = publicProcedure
     z.object({
       name: z.string().min(2, "Name must be at least 2 characters"),
       gamerHandle: z.string().min(3, "Gamer handle must be at least 3 characters").max(20, "Gamer handle must be less than 20 characters"),
-      email: z.string().email("Invalid email address").optional(),
-      phone: z.string().optional(),
+      email: z.string().email("Invalid email address"),
       password: z.string().min(6, "Password must be at least 6 characters"),
-    }).refine(data => data.email || data.phone, {
-      message: "Either email or phone is required",
     })
   )
   .mutation(async ({ input }) => {
@@ -21,10 +18,10 @@ export const registerProcedure = publicProcedure
       console.log('Name:', input.name);
       console.log('Gamer Handle:', input.gamerHandle);
       console.log('Email:', input.email);
-      console.log('Phone:', input.phone);
       
       const name = input.name.trim();
       const gamerHandle = input.gamerHandle.trim();
+      const email = input.email.trim();
       const password = input.password.trim();
       
       // Check if gamer handle is already taken
@@ -38,31 +35,11 @@ export const registerProcedure = publicProcedure
         throw new Error('This gamer handle is already taken. Please choose another one.');
       }
       
-      // Create auth user in Supabase
-      let authData;
-      let authError;
-      
-      if (input.email) {
-        const email = input.email.trim();
-        const result = await supabaseAdmin.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-        });
-        authData = result.data;
-        authError = result.error;
-      } else if (input.phone) {
-        const phone = input.phone.trim();
-        const result = await supabaseAdmin.auth.admin.createUser({
-          phone,
-          password,
-          phone_confirm: true,
-        });
-        authData = result.data;
-        authError = result.error;
-      } else {
-        throw new Error('Either email or phone is required');
-      }
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: false,
+      });
       
       if (authError || !authData.user) {
         console.error('Auth error:', authError);
@@ -78,8 +55,8 @@ export const registerProcedure = publicProcedure
           auth_user_id: authData.user.id,
           name,
           gamer_handle: gamerHandle,
-          email: input.email?.trim() || null,
-          phone: input.phone?.trim() || null,
+          email,
+          phone: null,
           role: 'player',
           status: 'active',
         })
@@ -106,38 +83,7 @@ export const registerProcedure = publicProcedure
         console.error('Stats creation error:', statsError);
       }
       
-      // Sign in the user to get a session
-      let sessionToken: string;
-      
-      if (input.email) {
-        const email = input.email.trim();
-        const result = await supabaseAdmin.auth.signInWithPassword({
-          email,
-          password,
-        });
-        
-        if (result.error || !result.data.session) {
-          console.error('Sign in error:', result.error);
-          throw new Error('Account created but failed to sign in. Please try logging in.');
-        }
-        
-        sessionToken = result.data.session.access_token;
-      } else if (input.phone) {
-        const phone = input.phone.trim();
-        const result = await supabaseAdmin.auth.signInWithPassword({
-          phone,
-          password,
-        });
-        
-        if (result.error || !result.data.session) {
-          console.error('Sign in error:', result.error);
-          throw new Error('Account created but failed to sign in. Please try logging in.');
-        }
-        
-        sessionToken = result.data.session.access_token;
-      } else {
-        throw new Error('Either email or phone is required');
-      }
+      const requiresEmailConfirmation = !authData.user.email_confirmed_at;
       
       const user: Player = {
         id: player.id,
@@ -166,11 +112,15 @@ export const registerProcedure = publicProcedure
       
       console.log('=== REGISTRATION SUCCESS ===');
       console.log('User:', user.name, '(' + user.email + ')');
+      console.log('Requires email confirmation:', requiresEmailConfirmation);
       
       return {
         user,
-        token: sessionToken,
-        message: "Account created successfully!",
+        token: '',
+        requiresEmailConfirmation,
+        message: requiresEmailConfirmation 
+          ? "Account created! Please check your email to confirm your account."
+          : "Account created successfully!",
       };
     } catch (error) {
       console.error('Registration error:', error);
