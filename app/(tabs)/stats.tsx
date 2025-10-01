@@ -132,7 +132,7 @@ export default function StatsScreen() {
 
         <View style={styles.playerInfo}>
           <View style={styles.playerNameContainer}>
-            <Text style={styles.playerName}>{player.name}</Text>
+            <Text style={styles.playerName}>@{player.gamerHandle}</Text>
             <AchievementBadges 
               leaguesWon={player.stats.leaguesWon}
               knockoutsWon={player.stats.knockoutsWon}
@@ -243,7 +243,7 @@ export default function StatsScreen() {
                       <View style={[styles.podiumBar, styles.silverBar]}>
                         <Text style={styles.podiumRank}>2</Text>
                       </View>
-                      <Text style={styles.podiumName}>{sortedPlayers[1].name}</Text>
+                      <Text style={styles.podiumName}>@{sortedPlayers[1].gamerHandle}</Text>
                       <AchievementBadges 
                         leaguesWon={sortedPlayers[1].stats.leaguesWon}
                         knockoutsWon={sortedPlayers[1].stats.knockoutsWon}
@@ -258,7 +258,7 @@ export default function StatsScreen() {
                       <View style={[styles.podiumBar, styles.goldBar]}>
                         <Text style={styles.podiumRank}>1</Text>
                       </View>
-                      <Text style={styles.podiumName}>{sortedPlayers[0].name}</Text>
+                      <Text style={styles.podiumName}>@{sortedPlayers[0].gamerHandle}</Text>
                       <AchievementBadges 
                         leaguesWon={sortedPlayers[0].stats.leaguesWon}
                         knockoutsWon={sortedPlayers[0].stats.knockoutsWon}
@@ -273,7 +273,7 @@ export default function StatsScreen() {
                       <View style={[styles.podiumBar, styles.bronzeBar]}>
                         <Text style={styles.podiumRank}>3</Text>
                       </View>
-                      <Text style={styles.podiumName}>{sortedPlayers[2].name}</Text>
+                      <Text style={styles.podiumName}>@{sortedPlayers[2].gamerHandle}</Text>
                       <AchievementBadges 
                         leaguesWon={sortedPlayers[2].stats.leaguesWon}
                         knockoutsWon={sortedPlayers[2].stats.knockoutsWon}
@@ -290,7 +290,7 @@ export default function StatsScreen() {
             {/* Full Leaderboard */}
             <View style={styles.leaderboard}>
               {sortedPlayers.map((player, index) => {
-                if (!player?.name?.trim()) return null;
+                if (!player?.gamerHandle?.trim()) return null;
                 return renderPlayerCard(player, index + 1);
               })}
             </View>
@@ -317,7 +317,7 @@ export default function StatsScreen() {
             </View>
             
             {sortedPlayers.map((player, index) => {
-              if (!player?.name?.trim()) return null;
+              if (!player?.gamerHandle?.trim()) return null;
               const goalDiff = player.stats.goalsFor - player.stats.goalsAgainst;
               
               return (
@@ -334,7 +334,7 @@ export default function StatsScreen() {
                   ]}>{index + 1}</Text>
                   <View style={[styles.tableCell, styles.playerColumn]}>
                     <Text style={styles.playerTableName} numberOfLines={1}>
-                      {player.name}
+                      @{player.gamerHandle}
                     </Text>
                     <AchievementBadges 
                       leaguesWon={player.stats.leaguesWon}
@@ -411,7 +411,7 @@ export default function StatsScreen() {
                               <Text style={styles.miniPodiumRank}>2</Text>
                             </View>
                             <Text style={styles.miniPodiumName} numberOfLines={1}>
-                              {players[1]?.name.split(' ')[0] || 'N/A'}
+                              @{players[1]?.gamerHandle || 'N/A'}
                             </Text>
                             {players[1] && (
                               <AchievementBadges 
@@ -430,7 +430,7 @@ export default function StatsScreen() {
                               <Text style={styles.miniPodiumRank}>1</Text>
                             </View>
                             <Text style={styles.miniPodiumName} numberOfLines={1}>
-                              {players[0]?.name.split(' ')[0] || 'N/A'}
+                              @{players[0]?.gamerHandle || 'N/A'}
                             </Text>
                             {players[0] && (
                               <AchievementBadges 
@@ -449,7 +449,7 @@ export default function StatsScreen() {
                               <Text style={styles.miniPodiumRank}>3</Text>
                             </View>
                             <Text style={styles.miniPodiumName} numberOfLines={1}>
-                              {players[2]?.name.split(' ')[0] || 'N/A'}
+                              @{players[2]?.gamerHandle || 'N/A'}
                             </Text>
                             {players[2] && (
                               <AchievementBadges 
@@ -495,7 +495,7 @@ export default function StatsScreen() {
                             ]}>{index + 1}</Text>
                             <View style={[styles.tableCell, styles.playerColumn]}>
                               <Text style={styles.playerTableName} numberOfLines={1}>
-                                {player.name}
+                                @{player.gamerHandle}
                               </Text>
                               <AchievementBadges 
                                 leaguesWon={player.stats.leaguesWon}
@@ -553,7 +553,7 @@ export default function StatsScreen() {
             {/* Player Selection */}
             <View style={styles.playerList}>
               {sortedPlayers.map((player, index) => {
-                if (!player?.name?.trim()) return null;
+                if (!player?.gamerHandle?.trim()) return null;
                 return renderPlayerCard(player, index + 1);
               })}
             </View>
@@ -570,7 +570,7 @@ export default function StatsScreen() {
                   <View style={styles.h2hPlayers}>
                     <View style={styles.h2hPlayer}>
                       <Text style={styles.h2hPlayerName}>
-                        {activeGroup.members.find(m => m.id === selectedPlayers[0])?.name || 'Unknown'}
+                        @{activeGroup.members.find(m => m.id === selectedPlayers[0])?.gamerHandle || 'Unknown'}
                       </Text>
                       <Text style={styles.h2hWins}>{h2hData.player1Wins}</Text>
                       <Text style={styles.h2hWinsLabel}>Wins</Text>
@@ -583,7 +583,7 @@ export default function StatsScreen() {
                     
                     <View style={styles.h2hPlayer}>
                       <Text style={styles.h2hPlayerName}>
-                        {activeGroup.members.find(m => m.id === selectedPlayers[1])?.name || 'Unknown'}
+                        @{activeGroup.members.find(m => m.id === selectedPlayers[1])?.gamerHandle || 'Unknown'}
                       </Text>
                       <Text style={styles.h2hWins}>{h2hData.player2Wins}</Text>
                       <Text style={styles.h2hWinsLabel}>Wins</Text>

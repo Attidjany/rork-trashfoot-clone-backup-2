@@ -474,7 +474,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         .insert({
           group_id: activeGroupId,
           sender_id: currentUser.id,
-          sender_name: currentUser.name,
+          sender_name: currentUser.gamerHandle,
           message,
           type,
           metadata,

@@ -90,7 +90,8 @@ export default function ProfileScreen() {
         <View style={styles.avatarContainer}>
           <User size={48} color="#fff" />
         </View>
-        <Text style={styles.userName}>{currentUser.name}</Text>
+        <Text style={styles.userName}>@{currentUser.gamerHandle}</Text>
+        <Text style={styles.userFullName}>{currentUser.name}</Text>
         <AchievementBadges 
           leaguesWon={currentUser.stats.leaguesWon}
           knockoutsWon={currentUser.stats.knockoutsWon}
@@ -371,10 +372,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: '#fff',
     marginBottom: 4,
+  },
+  userFullName: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginBottom: 8,
   },
   joinDate: {
     fontSize: 14,

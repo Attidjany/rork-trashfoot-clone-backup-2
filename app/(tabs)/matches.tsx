@@ -164,7 +164,7 @@ export default function MatchesScreen() {
         
         <View style={styles.matchContent}>
           <View style={styles.playerSection}>
-            <Text style={styles.playerName}>{homePlayer?.name}</Text>
+            <Text style={styles.playerName}>@{homePlayer?.gamerHandle}</Text>
             {match.status === 'completed' && (
               <Text style={styles.score}>{match.homeScore}</Text>
             )}
@@ -195,7 +195,7 @@ export default function MatchesScreen() {
             {match.status === 'completed' && (
               <Text style={styles.score}>{match.awayScore}</Text>
             )}
-            <Text style={styles.playerName}>{awayPlayer?.name}</Text>
+            <Text style={styles.playerName}>@{awayPlayer?.gamerHandle}</Text>
           </View>
         </View>
 
@@ -375,7 +375,7 @@ export default function MatchesScreen() {
             <View style={styles.scoreInputContainer}>
               <View style={styles.scoreInputSection}>
                 <Text style={styles.scoreLabel}>
-                  {activeGroup.members.find(m => m.id === selectedMatch?.homePlayerId)?.name}
+                  @{activeGroup.members.find(m => m.id === selectedMatch?.homePlayerId)?.gamerHandle}
                 </Text>
                 <TextInput
                   style={styles.scoreInput}
@@ -391,7 +391,7 @@ export default function MatchesScreen() {
               
               <View style={styles.scoreInputSection}>
                 <Text style={styles.scoreLabel}>
-                  {activeGroup.members.find(m => m.id === selectedMatch?.awayPlayerId)?.name}
+                  @{activeGroup.members.find(m => m.id === selectedMatch?.awayPlayerId)?.gamerHandle}
                 </Text>
                 <TextInput
                   style={styles.scoreInput}
