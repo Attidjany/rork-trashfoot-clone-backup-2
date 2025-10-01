@@ -160,6 +160,11 @@ export default function AuthScreen() {
   }, [gamerHandle, mode, checkHandleMutation]);
 
   const handleAuth = async () => {
+    console.log('=== handleAuth called ===');
+    console.log('Mode:', mode);
+    console.log('Email:', email);
+    console.log('Password length:', password.length);
+    
     if (!email.trim()) {
       Alert.alert('Error', 'Please enter your email');
       return;
@@ -189,12 +194,11 @@ export default function AuthScreen() {
     }
 
     setIsLoading(true);
-    console.log('=== AUTH ATTEMPT ===');
-    console.log('Mode:', mode);
-    console.log('Email:', email.trim());
+    console.log('=== Starting mutation ===');
 
     try {
       if (mode === 'signup') {
+        console.log('Calling registerMutation.mutateAsync...');
         const result = await registerMutation.mutateAsync({
           name: name.trim(),
           gamerHandle: gamerHandle.trim(),
@@ -215,7 +219,7 @@ export default function AuthScreen() {
           [{ text: 'OK', onPress: () => setMode('login') }]
         );
       } else {
-        console.log('Attempting backend login...');
+        console.log('Calling loginMutation.mutateAsync...');
         
         const result = await loginMutation.mutateAsync({
           email: email.trim(),
@@ -244,11 +248,15 @@ export default function AuthScreen() {
       console.error('Error type:', typeof error);
       console.error('Error:', error);
       console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
       
       let errorMessage = 'Authentication failed. Please try again.';
       
       if (error?.message) {
         errorMessage = error.message;
+      } else if (error?.data?.message) {
+        errorMessage = error.data.message;
       } else if (typeof error === 'string') {
         errorMessage = error;
       }
@@ -259,6 +267,7 @@ export default function AuthScreen() {
         errorMessage
       );
     } finally {
+      console.log('=== Setting isLoading to false ===');
       setIsLoading(false);
     }
   };
