@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { publicProcedure } from "@/backend/trpc/create-context";
-import { createRealAccount, isRealAccount, isDummyAccount } from "@/backend/trpc/shared/storage";
+import { supabaseAdmin } from "@/backend/lib/supabase-server";
 import { Player } from "@/types/game";
 
 export const registerProcedure = publicProcedure
@@ -19,42 +19,89 @@ export const registerProcedure = publicProcedure
       console.log('Gamer Handle:', input.gamerHandle);
       console.log('Email:', input.email);
       
-      // Validate input
-      if (!input.email?.trim()) {
-        throw new Error('Email is required');
-      }
-      if (!input.name?.trim()) {
-        throw new Error('Name is required');
-      }
-      if (!input.gamerHandle?.trim()) {
-        throw new Error('Gamer handle is required');
-      }
-      if (!input.password?.trim()) {
-        throw new Error('Password is required');
-      }
-      
       const email = input.email.trim();
       const name = input.name.trim();
       const gamerHandle = input.gamerHandle.trim();
+      const password = input.password.trim();
       
-      // Check if account already exists (real or dummy)
-      if (isRealAccount(email)) {
-        throw new Error('An account with this email already exists');
+      // Check if gamer handle is already taken
+      const { data: existingHandle } = await supabaseAdmin
+        .from('players')
+        .select('id')
+        .eq('gamer_handle', gamerHandle)
+        .single();
+      
+      if (existingHandle) {
+        throw new Error('This gamer handle is already taken. Please choose another one.');
       }
       
-      if (isDummyAccount(email)) {
-        throw new Error('This email is reserved for demo accounts. Please use a different email.');
-      }
-      
-      // Create new real user
-      const user: Player = {
-        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-        name,
-        gamerHandle,
+      // Create auth user in Supabase
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        joinedAt: new Date().toISOString(),
-        role: 'player' as const,
-        status: 'active' as const,
+        password,
+        email_confirm: true,
+      });
+      
+      if (authError || !authData.user) {
+        console.error('Auth error:', authError);
+        throw new Error(authError?.message || 'Failed to create account');
+      }
+      
+      console.log('Auth user created:', authData.user.id);
+      
+      // Create player profile
+      const { data: player, error: playerError } = await supabaseAdmin
+        .from('players')
+        .insert({
+          auth_user_id: authData.user.id,
+          name,
+          gamer_handle: gamerHandle,
+          email,
+          role: 'player',
+          status: 'active',
+        })
+        .select()
+        .single();
+      
+      if (playerError || !player) {
+        console.error('Player creation error:', playerError);
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+        throw new Error('Failed to create player profile');
+      }
+      
+      console.log('Player profile created:', player.id);
+      
+      // Create initial global stats
+      const { error: statsError } = await supabaseAdmin
+        .from('player_stats')
+        .insert({
+          player_id: player.id,
+          group_id: null,
+        });
+      
+      if (statsError) {
+        console.error('Stats creation error:', statsError);
+      }
+      
+      // Sign in the user to get a session
+      const { data: sessionData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (signInError || !sessionData.session) {
+        console.error('Sign in error:', signInError);
+        throw new Error('Account created but failed to sign in. Please try logging in.');
+      }
+      
+      const user: Player = {
+        id: player.id,
+        name: player.name,
+        gamerHandle: player.gamer_handle,
+        email: player.email,
+        role: player.role as 'player' | 'admin' | 'super_admin',
+        status: player.status as 'active' | 'suspended' | 'banned',
+        joinedAt: player.joined_at,
         stats: {
           played: 0,
           wins: 0,
@@ -71,25 +118,13 @@ export const registerProcedure = publicProcedure
         },
       };
       
-      // Save as real account
-      createRealAccount(user);
-      
-      // Generate a simple token (in production, use proper JWT)
-      const token = Buffer.from(JSON.stringify({ 
-        userId: user.id, 
-        email: user.email,
-        role: user.role,
-        timestamp: Date.now()
-      })).toString('base64');
-      
       console.log('=== REGISTRATION SUCCESS ===');
       console.log('User:', user.name, '(' + user.email + ')');
-      console.log('Account type: real');
       
       return {
         user,
-        token,
-        message: "Real account created successfully!",
+        token: sessionData.session.access_token,
+        message: "Account created successfully!",
       };
     } catch (error) {
       console.error('Registration error:', error);

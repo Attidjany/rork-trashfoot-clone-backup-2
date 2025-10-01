@@ -2,8 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Player, Group, Competition, Match, ChatMessage, PlayerStats, KnockoutBracket, TournamentRound } from '@/types/game';
-
-import { trpcClient } from '@/lib/trpc';
+import { supabaseClient } from '@/lib/supabase';
 
 const STORAGE_KEYS = {
   CURRENT_USER: 'trashfoot_current_user',
@@ -11,8 +10,6 @@ const STORAGE_KEYS = {
   ACTIVE_GROUP: 'trashfoot_active_group',
   MESSAGES: 'trashfoot_messages',
 };
-
-
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -72,6 +69,8 @@ function calculatePlayerStats(playerId: string, matches: Match[]): PlayerStats {
     points,
     winRate,
     form: form.slice(0, 5),
+    leaguesWon: 0,
+    knockoutsWon: 0,
   };
 }
 
@@ -85,14 +84,12 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   const isSavingRef = useRef(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load data from AsyncStorage
   useEffect(() => {
     const loadData = async () => {
       try {
         console.log('=== GAME STORE INITIALIZATION ===');
         console.log('Loading data from AsyncStorage...');
         
-        // Add timeout to prevent hanging
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('AsyncStorage timeout')), 5000);
         });
@@ -111,23 +108,19 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
 
         console.log('Storage check - User:', !!userStr, 'Groups:', !!groupsStr, 'ActiveGroup:', !!activeGroupStr, 'Messages:', !!messagesStr);
 
-        // Only load from storage if we have user data
         if (userStr && userStr !== 'null' && userStr.trim() !== '') {
           console.log('Found user data in storage, loading...');
           try {
             const parsedUser = JSON.parse(userStr);
             
-            // Validate user object
             if (parsedUser && parsedUser.id && parsedUser.name && parsedUser.email) {
               console.log('Loaded valid user from storage:', parsedUser.name, parsedUser.email);
               
-              // Load associated data first
               if (groupsStr && groupsStr !== 'null' && groupsStr.trim() !== '') {
                 try {
                   const parsedGroups = JSON.parse(groupsStr);
                   if (Array.isArray(parsedGroups)) {
                     console.log('Loaded groups from storage:', parsedGroups.length);
-                    // Migrate groups to ensure adminIds exists
                     const migratedGroups = parsedGroups.map((group: Group) => ({
                       ...group,
                       adminIds: group.adminIds || (group.adminId ? [group.adminId] : []),
@@ -170,7 +163,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
                 setMessages([]);
               }
               
-              // Set user last to avoid triggering save effect before data is loaded
               setCurrentUser(parsedUser);
             } else {
               console.warn('Invalid user data structure, clearing storage');
@@ -178,7 +170,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
             }
           } catch (e) {
             console.warn('Failed to parse user data, clearing storage:', e);
-            // Clear corrupted data
             try {
               await Promise.all([
                 AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_USER),
@@ -189,7 +180,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
             } catch (clearError) {
               console.error('Failed to clear corrupted storage:', clearError);
             }
-            // Set clean state
             setCurrentUser(null);
             setGroups([]);
             setActiveGroupId(null);
@@ -197,7 +187,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
           }
         } else {
           console.log('No user found in storage, user needs to login');
-          // Ensure clean state
           setCurrentUser(null);
           setGroups([]);
           setActiveGroupId(null);
@@ -205,7 +194,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         }
       } catch (error) {
         console.error('Error loading data:', error);
-        // Ensure clean state on error
         setCurrentUser(null);
         setGroups([]);
         setActiveGroupId(null);
@@ -220,11 +208,9 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     loadData();
     
     return () => {
-      // Cleanup function to prevent memory leaks
     };
   }, []);
 
-  // Save data function - called manually when needed
   const saveData = useCallback(async () => {
     if (!currentUser || isSavingRef.current) {
       return;
@@ -240,41 +226,12 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         messagesCount: messages.length
       });
       
-      // Save to local storage
       await Promise.all([
         AsyncStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser)),
         AsyncStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify(groups)),
         AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_GROUP, activeGroupId || ''),
         AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages)),
       ]);
-      
-      // Also save to backend if user has email (not guest) - but skip if backend is unavailable
-      if (currentUser.email) {
-        try {
-          // Add timeout to prevent hanging on backend calls
-          const savePromise = trpcClient.auth.saveData.mutate({
-            email: currentUser.email,
-            gameData: {
-              currentUser,
-              groups,
-              activeGroupId: activeGroupId || '',
-              messages,
-            },
-          });
-          
-          // Race with timeout
-          await Promise.race([
-            savePromise,
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Backend save timeout')), 3000)
-            )
-          ]);
-          
-          console.log('Data saved to backend successfully');
-        } catch (backendError) {
-          console.warn('Failed to save to backend, but local save succeeded:', backendError);
-        }
-      }
       
       console.log('Data saved successfully');
     } catch (error) {
@@ -285,30 +242,27 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   }, [currentUser, groups, activeGroupId, messages]);
   
   
-  // Debounced save effect - only triggers when data actually changes
   useEffect(() => {
     if (!isHydrated || isLoading || !currentUser || isSavingRef.current) {
       return;
     }
     
-    // Clear any existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     
-    // Debounce saves to avoid too frequent calls
     saveTimeoutRef.current = setTimeout(() => {
       if (!isSavingRef.current) {
         saveData();
       }
-    }, 10000); // Much longer debounce time to prevent loops
+    }, 10000);
     
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [currentUser?.id, groups.length, activeGroupId, messages.length, isHydrated, isLoading]);
+  }, [currentUser?.id, groups.length, activeGroupId, messages.length, isHydrated, isLoading, saveData]);
 
   const activeGroup = useMemo(() => {
     return groups.find(g => g.id === activeGroupId) || null;
@@ -334,32 +288,82 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         points: 0,
         winRate: 0,
         form: [],
+        leaguesWon: 0,
+        knockoutsWon: 0,
       },
     };
     setCurrentUser(newUser);
     return newUser;
   }, []);
 
-  const createGroup = useCallback((name: string, description: string) => {
+  const createGroup = useCallback(async (name: string, description: string) => {
     if (!currentUser) return null;
 
-    const newGroup: Group = {
-      id: generateId(),
-      name,
-      description,
-      adminId: currentUser.id,
-      adminIds: [currentUser.id],
-      members: [currentUser],
-      createdAt: new Date().toISOString(),
-      competitions: [],
-      inviteCode: generateInviteCode(),
-      isPublic: false,
-      pendingMembers: [],
-    };
+    try {
+      const inviteCode = generateInviteCode();
+      
+      const { data: group, error: groupError } = await supabaseClient
+        .from('groups')
+        .insert({
+          name,
+          description,
+          admin_id: currentUser.id,
+          invite_code: inviteCode,
+          is_public: false,
+        })
+        .select()
+        .single();
+      
+      if (groupError || !group) {
+        console.error('Error creating group:', groupError);
+        return null;
+      }
+      
+      const { error: memberError } = await supabaseClient
+        .from('group_members')
+        .insert({
+          group_id: group.id,
+          player_id: currentUser.id,
+          is_admin: true,
+        });
+      
+      if (memberError) {
+        console.error('Error adding member:', memberError);
+        return null;
+      }
+      
+      const { error: statsError } = await supabaseClient
+        .from('player_stats')
+        .insert({
+          player_id: currentUser.id,
+          group_id: group.id,
+        });
+      
+      if (statsError) {
+        console.error('Error creating stats:', statsError);
+      }
+      
+      const newGroup: Group = {
+        id: group.id,
+        name: group.name,
+        description: group.description || '',
+        adminId: group.admin_id,
+        adminIds: [group.admin_id],
+        members: [currentUser],
+        createdAt: group.created_at,
+        competitions: [],
+        inviteCode: group.invite_code,
+        isPublic: group.is_public,
+        pendingMembers: [],
+      };
 
-    setGroups(prev => [...prev, newGroup]);
-    setActiveGroupId(newGroup.id);
-    return newGroup;
+      setGroups(prev => [...prev, newGroup]);
+      setActiveGroupId(newGroup.id);
+      return newGroup;
+    } catch (error) {
+      console.error('Error creating group:', error);
+      return null;
+    }
   }, [currentUser]);
 
   const joinGroup = useCallback((inviteCode: string) => {
@@ -369,7 +373,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     if (!group) return null;
 
     if (group.members.find(m => m.id === currentUser.id)) {
-      // User already in group
       setActiveGroupId(group.id);
       return group;
     }
@@ -458,26 +461,49 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     return newMatch;
   }, []);
 
-  const sendMessage = useCallback((
+  const sendMessage = useCallback(async (
     message: string,
     type: ChatMessage['type'] = 'text',
     metadata?: ChatMessage['metadata']
   ) => {
     if (!currentUser || !activeGroupId) return;
 
-    const newMessage: ChatMessage = {
-      id: generateId(),
-      groupId: activeGroupId,
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      message,
-      timestamp: new Date().toISOString(),
-      type,
-      metadata,
-    };
+    try {
+      const { data: chatMessage, error } = await supabaseClient
+        .from('chat_messages')
+        .insert({
+          group_id: activeGroupId,
+          sender_id: currentUser.id,
+          sender_name: currentUser.name,
+          message,
+          type,
+          metadata,
+          timestamp: new Date().toISOString(),
+        })
+        .select()
+        .single();
+      
+      if (error || !chatMessage) {
+        console.error('Error sending message:', error);
+        return;
+      }
+      
+      const newMessage: ChatMessage = {
+        id: chatMessage.id,
+        groupId: chatMessage.group_id,
+        senderId: chatMessage.sender_id,
+        senderName: chatMessage.sender_name,
+        message: chatMessage.message,
+        timestamp: chatMessage.timestamp,
+        type: chatMessage.type as 'text' | 'match_result' | 'youtube_link',
+        metadata: chatMessage.metadata || undefined,
+      };
 
-    setMessages(prev => [...prev, newMessage]);
-    return newMessage;
+      setMessages(prev => [...prev, newMessage]);
+      return newMessage;
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
   }, [currentUser, activeGroupId]);
 
   const updateMatchResult = useCallback((
@@ -506,39 +532,17 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
               completedAt: new Date().toISOString(),
             };
             
-            // Check if it's a knockout match with a draw - create replay match
             const competition = comp;
             if (competition.type === 'tournament' && competition.tournamentType === 'knockout' && homeScore === awayScore) {
-              // Create a replay match automatically
               const replayMatch: Match = {
                 id: generateId(),
                 competitionId: match.competitionId,
                 homePlayerId: match.homePlayerId,
                 awayPlayerId: match.awayPlayerId,
                 status: 'scheduled',
-                scheduledTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Next day
+                scheduledTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
               };
               comp.matches.push(replayMatch);
-            }
-            
-            // Check if we need to generate next round matches for knockout tournaments
-            if (competition.type === 'tournament' && competition.tournamentType === 'knockout' && competition.bracket) {
-              const bracket = competition.bracket;
-              const currentRound = bracket.currentRound;
-              const currentRoundMatches = bracket.rounds[currentRound]?.matches || [];
-              
-              // Check if all matches in current round are completed
-              const allCompleted = currentRoundMatches.every(matchId => {
-                const roundMatch = comp.matches.find(m => m.id === matchId);
-                return roundMatch && roundMatch.status === 'completed';
-              });
-              
-              if (allCompleted && currentRound < bracket.totalRounds - 1) {
-                // Generate next round matches after a short delay
-                setTimeout(() => {
-                  generateNextRoundMatches(competition.id, currentRound);
-                }, 1000);
-              }
             }
             
             return updatedMatch;
@@ -548,7 +552,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       })),
     })));
 
-    // Add match result to chat
     const match = groups
       .flatMap(g => g.competitions)
       .flatMap(c => c.matches)
@@ -564,7 +567,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         { matchId }
       );
       
-      // If it's a draw in knockout, notify about replay
       if (homeScore === awayScore) {
         const competition = activeGroup?.competitions.find(c => c.id === match.competitionId);
         if (competition?.type === 'tournament' && competition.tournamentType === 'knockout') {
@@ -657,7 +659,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   const deleteMatch = useCallback((matchId: string) => {
     if (!currentUser || !activeGroup) return false;
     
-    // Check if user is admin or one of the players
     const match = activeGroup.competitions
       .flatMap(c => c.matches)
       .find(m => m.id === matchId);
@@ -669,7 +670,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     
     if (!isAdmin && !isPlayer) return false;
     
-    // Only allow deletion of non-completed matches
     if (match.status === 'completed') return false;
     
     setGroups(prev => prev.map(group => ({
@@ -690,7 +690,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   ) => {
     if (!currentUser || !activeGroup) return false;
     
-    // Check if user is admin
     const isAdmin = activeGroup.adminIds?.includes(currentUser.id) || activeGroup.adminId === currentUser.id;
     if (!isAdmin) return false;
     
@@ -726,10 +725,8 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     console.log('User:', user.name, user.email, user.role);
     console.log('Game data provided:', !!gameData);
     
-    // Prevent saving during login process
     isSavingRef.current = true;
     
-    // Clear any existing save timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
@@ -740,13 +737,10 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       console.log('Active group ID:', gameData.activeGroupId);
       console.log('Messages count:', gameData.messages?.length || 0);
       
-      // Use the current user from game data (it might have updated stats)
       const currentUserFromData = gameData.currentUser || user;
       
-      // Ensure groups have the updated user data and proper structure
       const updatedGroups = gameData.groups.map(group => ({
         ...group,
-        // Ensure adminIds exists for backward compatibility
         adminIds: group.adminIds || (group.adminId ? [group.adminId] : []),
         members: group.members.map(member => 
           member.id === currentUserFromData.id ? currentUserFromData : member
@@ -762,24 +756,20 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       console.log('Setting messages:', gameData.messages?.length || 0);
       setMessages(gameData.messages || []);
       
-      // Set the user last to avoid triggering save effect before data is loaded
       console.log('Setting current user:', currentUserFromData.name);
       setCurrentUser(currentUserFromData);
       
       console.log('Successfully loaded user data with', updatedGroups.length, 'groups');
     } else {
       console.log('No game data provided or empty groups, clearing existing data');
-      // Clear any existing data to avoid confusion
       setGroups([]);
       setActiveGroupId(null);
       setMessages([]);
       
-      // Set the user last
       console.log('Setting current user:', user.name);
       setCurrentUser(user);
     }
     
-    // Allow saving again after a longer delay to ensure all state is settled
     setTimeout(() => {
       isSavingRef.current = false;
       console.log('Login process complete, saving enabled');
@@ -791,7 +781,8 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   const logout = useCallback(async () => {
     console.log('Logging out user...');
     try {
-      // Clear all local storage
+      await supabaseClient.auth.signOut();
+      
       await Promise.all([
         AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_USER),
         AsyncStorage.removeItem(STORAGE_KEYS.GROUPS),
@@ -799,7 +790,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         AsyncStorage.removeItem(STORAGE_KEYS.MESSAGES),
       ]);
       
-      // Clear state
       setCurrentUser(null);
       setGroups([]);
       setActiveGroupId(null);
@@ -831,7 +821,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       const currentRoundMatches = bracket.rounds[completedRound]?.matches || [];
       const winners: string[] = [];
       
-      // Get winners from completed round
       currentRoundMatches.forEach(matchId => {
         const match = competition.matches.find(m => m.id === matchId);
         if (match && match.status === 'completed' && match.homeScore !== undefined && match.awayScore !== undefined) {
@@ -840,13 +829,11 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
           } else if (match.awayScore > match.homeScore) {
             winners.push(match.awayPlayerId);
           }
-          // Note: In knockout, draws should trigger replays, handled elsewhere
         }
       });
       
       console.log('Winners from round', completedRound, ':', winners);
       
-      // Check if we have enough winners to generate next round
       const expectedWinners = Math.pow(2, bracket.totalRounds - completedRound - 1);
       if (winners.length < expectedWinners) {
         console.log('Not enough winners yet. Expected:', expectedWinners, 'Got:', winners.length);
@@ -859,7 +846,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         return group;
       }
       
-      // Generate matches for next round
       const nextRoundMatches: Match[] = [];
       for (let i = 0; i < winners.length; i += 2) {
         if (i + 1 < winners.length) {
@@ -877,7 +863,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       
       console.log('Generated', nextRoundMatches.length, 'matches for round', nextRound);
       
-      // Update bracket and competition
       const updatedBracket = {
         ...bracket,
         currentRound: nextRound,
@@ -937,13 +922,11 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       console.log('Competition type:', competition.type);
 
       if (competition.type === 'league') {
-        // Generate round-robin matches
         for (let i = 0; i < participants.length; i++) {
           for (let j = i + 1; j < participants.length; j++) {
             const homePlayerId = participants[i];
             const awayPlayerId = participants[j];
             
-            // First match
             matches.push({
               id: generateId(),
               competitionId,
@@ -953,7 +936,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
               scheduledTime: new Date(Date.now() + matches.length * 86400000).toISOString(),
             });
 
-            // If double round-robin (home and away)
             if (competition.leagueFormat === 'double') {
               matches.push({
                 id: generateId(),
@@ -967,7 +949,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
           }
         }
       } else if (competition.type === 'friendly' && participants.length === 2) {
-        // Generate friendly matches
         const matchCount = competition.friendlyTarget || 1;
         for (let i = 0; i < matchCount; i++) {
           matches.push({
@@ -980,10 +961,8 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
           });
         }
       } else if (competition.type === 'tournament' && competition.tournamentType === 'knockout') {
-        // Generate knockout tournament - only first round initially
         const playerCount = participants.length;
         if (playerCount >= 4) {
-          // Generate first round matches only
           for (let i = 0; i < playerCount; i += 2) {
             if (i + 1 < playerCount) {
               const match: Match = {
@@ -998,12 +977,10 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
             }
           }
           
-          // Create bracket structure
           const totalRounds = Math.ceil(Math.log2(playerCount));
           const rounds: TournamentRound[] = [];
           
           for (let round = 0; round < totalRounds; round++) {
-            const matchesInRound = Math.pow(2, totalRounds - round - 1);
             const roundMatches = round === 0 ? matches.map(m => m.id) : [];
             
             rounds.push({
@@ -1026,7 +1003,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
             winners: {},
           };
           
-          // Update competition with bracket
           competition.bracket = bracket;
           competition.rounds = rounds;
         }
