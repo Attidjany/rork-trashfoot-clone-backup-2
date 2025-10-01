@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm install ajv@^8.12.0 && npm run build:web",
+  "buildCommand": "npm install --legacy-peer-deps ajv@^8.12.0 && npm run build:web",
   "outputDirectory": "dist",
   "installCommand": "npm install --legacy-peer-deps",
   "framework": null,
