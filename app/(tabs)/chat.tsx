@@ -8,20 +8,36 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, Trophy, Youtube } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
+import { useSession } from '@/hooks/use-session';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
-  const { activeGroup, messages, sendMessage, currentUser } = useGameStore();
+  const { user, loading: sessionLoading } = useSession();
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { activeGroupId, messages, sendMessage, currentUser } = useGameStore();
+  
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
+  const isLoading = sessionLoading || groupsLoading;
   const [inputText, setInputText] = useState('');
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color="#0EA5E9" />
+      </View>
+    );
+  }
 
   if (!activeGroup) {
     return (

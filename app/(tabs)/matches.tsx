@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,11 +15,18 @@ import { Plus, Calendar, Trophy, Youtube, Clock, CheckCircle, Target } from 'luc
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Match, Competition } from '@/types/game';
+import { useSession } from '@/hooks/use-session';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function MatchesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { activeGroup, updateMatchResult, shareYoutubeLink, deleteMatch, correctMatchScore, currentUser } = useGameStore();
+  const { user, loading: sessionLoading } = useSession();
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { activeGroupId, updateMatchResult, shareYoutubeLink, deleteMatch, correctMatchScore, currentUser } = useGameStore();
+  
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
+  const isLoading = sessionLoading || groupsLoading;
   const [selectedTab, setSelectedTab] = useState<'upcoming' | 'live' | 'completed' | 'tournaments'>('upcoming');
   const [resultModal, setResultModal] = useState(false);
   const [youtubeModal, setYoutubeModal] = useState(false);
@@ -27,6 +35,14 @@ export default function MatchesScreen() {
   const [awayScore, setAwayScore] = useState('');
   const [youtubeLink, setYoutubeLink] = useState('');
   const [goLiveWithoutLink, setGoLiveWithoutLink] = useState(false);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color="#0EA5E9" />
+      </View>
+    );
+  }
 
   if (!activeGroup) {
     return (

@@ -5,15 +5,23 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { Trophy, Target, Users, Table, ChevronDown, ChevronUp, Award } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Player } from '@/types/game';
 import { AchievementBadges } from '@/components/AchievementBadges';
+import { useSession } from '@/hooks/use-session';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function StatsScreen() {
-  const { activeGroup, getHeadToHead } = useGameStore();
+  const { user, loading: sessionLoading } = useSession();
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { activeGroupId, getHeadToHead } = useGameStore();
+  
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
+  const isLoading = sessionLoading || groupsLoading;
   const [selectedTab, setSelectedTab] = useState<'leaderboard' | 'h2h' | 'table' | 'leagues'>('leaderboard');
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [showFullTable, setShowFullTable] = useState<{ [key: string]: boolean }>({});
@@ -82,6 +90,14 @@ export default function StatsScreen() {
         };
       });
   }, [activeGroup]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.emptyContainer}>
+        <ActivityIndicator size="large" color="#0EA5E9" />
+      </View>
+    );
+  }
 
   if (!activeGroup) {
     return (
