@@ -1,15 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useGameStore } from '@/hooks/use-game-store';
+import { useSession } from '@/hooks/use-session';
+import { supabase } from '@/lib/supabase';
 import { trpc } from '@/lib/trpc';
 
 export default function Index() {
   const router = useRouter();
-  const { currentUser, isLoading, isHydrated } = useGameStore();
+  const { user, loading } = useSession();
   const hasRedirected = useRef(false);
   
-  // Test backend connection
   const backendTest = trpc.example.hi.useQuery(
     { name: 'Test' },
     { 
@@ -27,36 +27,60 @@ export default function Index() {
   }, [backendTest.data, backendTest.error]);
 
   useEffect(() => {
-    // Prevent multiple redirects
-    if (hasRedirected.current) {
+    if (hasRedirected.current || loading) {
       return;
     }
     
     console.log('=== INDEX ROUTE CHECK ===');
-    console.log('isHydrated:', isHydrated);
-    console.log('isLoading:', isLoading);
-    console.log('currentUser:', currentUser ? `${currentUser.name} (${currentUser.email})` : 'null');
+    console.log('loading:', loading);
+    console.log('user:', user ? `${user.email}` : 'null');
     
-    if (isHydrated && !isLoading) {
-      hasRedirected.current = true;
-      
-      if (currentUser) {
-        console.log('Index: User found, redirecting to home:', currentUser.name, currentUser.email);
-        router.replace('/(tabs)/home');
-      } else {
+    async function checkAndRedirect() {
+      if (!user) {
         console.log('Index: No user found, redirecting to auth');
+        hasRedirected.current = true;
         router.replace('/auth');
+        return;
       }
-    }
-  }, [currentUser, isLoading, isHydrated, router]);
 
-  console.log('Index render - isHydrated:', isHydrated, 'isLoading:', isLoading, 'currentUser:', !!currentUser);
+      const { data: playerData } = await supabase
+        .from('players')
+        .select('id, name, gamer_handle')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (!playerData) {
+        console.log('Index: Player profile not found, redirecting to auth');
+        hasRedirected.current = true;
+        router.replace('/auth');
+        return;
+      }
+
+      if (!playerData.name) {
+        console.log('Index: Profile incomplete, redirecting to complete-profile');
+        hasRedirected.current = true;
+        router.replace({
+          pathname: '/complete-profile',
+          params: { playerId: playerData.id },
+        });
+        return;
+      }
+
+      console.log('Index: User authenticated and profile complete, redirecting to home');
+      hasRedirected.current = true;
+      router.replace('/(tabs)/home');
+    }
+
+    checkAndRedirect();
+  }, [user, loading, router]);
+
+  console.log('Index render - loading:', loading, 'user:', !!user);
 
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color="#0EA5E9" />
       <Text style={styles.loadingText}>
-        {!isHydrated ? 'Initializing...' : isLoading ? 'Loading...' : 'Redirecting...'}
+        {loading ? 'Loading...' : 'Redirecting...'}
       </Text>
     </View>
   );

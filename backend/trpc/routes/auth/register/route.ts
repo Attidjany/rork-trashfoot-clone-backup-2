@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { publicProcedure } from "../../../create-context";
 import { supabaseAdmin } from "../../../../lib/supabase-server";
-import { Player } from "../../../../../types/game";
 
 export const registerProcedure = publicProcedure
   .input(
@@ -39,7 +38,6 @@ export const registerProcedure = publicProcedure
         name: null,
         gamer_handle: null,
         email,
-        phone: null,
         role: 'player',
         status: 'active',
       })
@@ -65,43 +63,18 @@ export const registerProcedure = publicProcedure
       console.error('Stats creation error:', statsError);
     }
     
-    const requiresEmailConfirmation = true;
-    
-    const user: Player = {
-      id: player.id,
-      name: player.name || 'New Player',
-      gamerHandle: player.gamer_handle || `player_${player.id.slice(0, 8)}`,
-      email: player.email || '',
-      phone: player.phone || undefined,
-      role: player.role as 'player' | 'admin' | 'super_admin',
-      status: player.status as 'active' | 'suspended' | 'banned',
-      joinedAt: player.joined_at,
-      stats: {
-        played: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        cleanSheets: 0,
-        points: 0,
-        winRate: 0,
-        form: [],
-        leaguesWon: 0,
-        knockoutsWon: 0,
-      },
-    };
+    const requiresEmailConfirmation = !authData.session;
     
     console.log('=== REGISTRATION SUCCESS ===');
-    console.log('User:', user.name, '(' + user.email + ')');
+    console.log('User email:', player.email);
     console.log('Requires email confirmation:', requiresEmailConfirmation);
     
     return {
-      user,
-      token: '',
+      playerId: player.id,
+      email: player.email,
       requiresEmailConfirmation,
       message: requiresEmailConfirmation 
         ? "Account created! Please check your email to confirm your account."
-        : "Account created successfully!",
+        : "Account created successfully! Please complete your profile.",
     };
   });

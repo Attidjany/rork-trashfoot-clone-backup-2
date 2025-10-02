@@ -1,15 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useState, useMemo, useCallback } from 'react';
 import { Player, Group, Competition, Match, ChatMessage, PlayerStats, KnockoutBracket, TournamentRound } from '@/types/game';
-import { supabaseClient } from '@/lib/supabase';
-
-const STORAGE_KEYS = {
-  CURRENT_USER: 'trashfoot_current_user',
-  GROUPS: 'trashfoot_groups',
-  ACTIVE_GROUP: 'trashfoot_active_group',
-  MESSAGES: 'trashfoot_messages',
-};
+import { supabase } from '@/lib/supabase';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -79,222 +71,11 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const isSavingRef = useRef(false);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        console.log('=== GAME STORE INITIALIZATION ===');
-        console.log('Loading data from AsyncStorage...');
-        
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('AsyncStorage timeout')), 5000);
-        });
-        
-        const storagePromise = Promise.all([
-          AsyncStorage.getItem(STORAGE_KEYS.CURRENT_USER),
-          AsyncStorage.getItem(STORAGE_KEYS.GROUPS),
-          AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_GROUP),
-          AsyncStorage.getItem(STORAGE_KEYS.MESSAGES),
-        ]);
-        
-        const [userStr, groupsStr, activeGroupStr, messagesStr] = await Promise.race([
-          storagePromise,
-          timeoutPromise
-        ]) as [string | null, string | null, string | null, string | null];
-
-        console.log('Storage check - User:', !!userStr, 'Groups:', !!groupsStr, 'ActiveGroup:', !!activeGroupStr, 'Messages:', !!messagesStr);
-
-        if (userStr && userStr !== 'null' && userStr.trim() !== '') {
-          console.log('Found user data in storage, loading...');
-          try {
-            const parsedUser = JSON.parse(userStr);
-            
-            if (parsedUser && parsedUser.id && parsedUser.name && parsedUser.email) {
-              console.log('Loaded valid user from storage:', parsedUser.name, parsedUser.email);
-              
-              if (groupsStr && groupsStr !== 'null' && groupsStr.trim() !== '') {
-                try {
-                  const parsedGroups = JSON.parse(groupsStr);
-                  if (Array.isArray(parsedGroups)) {
-                    console.log('Loaded groups from storage:', parsedGroups.length);
-                    const migratedGroups = parsedGroups.map((group: Group) => ({
-                      ...group,
-                      adminIds: group.adminIds || (group.adminId ? [group.adminId] : []),
-                    }));
-                    setGroups(migratedGroups);
-                  } else {
-                    console.warn('Groups data is not an array, resetting');
-                    setGroups([]);
-                  }
-                } catch (e) {
-                  console.warn('Failed to parse groups data:', e);
-                  setGroups([]);
-                }
-              } else {
-                setGroups([]);
-              }
-              
-              if (activeGroupStr && activeGroupStr !== 'null' && activeGroupStr.trim() !== '') {
-                console.log('Loaded active group:', activeGroupStr);
-                setActiveGroupId(activeGroupStr);
-              } else {
-                setActiveGroupId(null);
-              }
-              
-              if (messagesStr && messagesStr !== 'null' && messagesStr.trim() !== '') {
-                try {
-                  const parsedMessages = JSON.parse(messagesStr);
-                  if (Array.isArray(parsedMessages)) {
-                    console.log('Loaded messages from storage:', parsedMessages.length);
-                    setMessages(parsedMessages);
-                  } else {
-                    console.warn('Messages data is not an array, resetting');
-                    setMessages([]);
-                  }
-                } catch (e) {
-                  console.warn('Failed to parse messages data:', e);
-                  setMessages([]);
-                }
-              } else {
-                setMessages([]);
-              }
-              
-              setCurrentUser(parsedUser);
-            } else {
-              console.warn('Invalid user data structure, clearing storage');
-              throw new Error('Invalid user data');
-            }
-          } catch (e) {
-            console.warn('Failed to parse user data, clearing storage:', e);
-            try {
-              await Promise.all([
-                AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_USER),
-                AsyncStorage.removeItem(STORAGE_KEYS.GROUPS),
-                AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_GROUP),
-                AsyncStorage.removeItem(STORAGE_KEYS.MESSAGES),
-              ]);
-            } catch (clearError) {
-              console.error('Failed to clear corrupted storage:', clearError);
-            }
-            setCurrentUser(null);
-            setGroups([]);
-            setActiveGroupId(null);
-            setMessages([]);
-          }
-        } else {
-          console.log('No user found in storage, user needs to login');
-          setCurrentUser(null);
-          setGroups([]);
-          setActiveGroupId(null);
-          setMessages([]);
-        }
-      } catch (error) {
-        console.error('Error loading data:', error);
-        setCurrentUser(null);
-        setGroups([]);
-        setActiveGroupId(null);
-        setMessages([]);
-      } finally {
-        setIsLoading(false);
-        setIsHydrated(true);
-        console.log('=== GAME STORE INITIALIZED ===');
-      }
-    };
-
-    loadData();
-    
-    return () => {
-    };
-  }, []);
-
-  const saveData = useCallback(async () => {
-    if (!currentUser || isSavingRef.current) {
-      return;
-    }
-    
-    isSavingRef.current = true;
-    
-    try {
-      console.log('Saving data to AsyncStorage...', {
-        user: currentUser?.name,
-        groupsCount: groups.length,
-        activeGroup: activeGroupId,
-        messagesCount: messages.length
-      });
-      
-      await Promise.all([
-        AsyncStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser)),
-        AsyncStorage.setItem(STORAGE_KEYS.GROUPS, JSON.stringify(groups)),
-        AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_GROUP, activeGroupId || ''),
-        AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages)),
-      ]);
-      
-      console.log('Data saved successfully');
-    } catch (error) {
-      console.error('Error saving data:', error);
-    } finally {
-      isSavingRef.current = false;
-    }
-  }, [currentUser, groups, activeGroupId, messages]);
-  
-  
-  useEffect(() => {
-    if (!isHydrated || isLoading || !currentUser || isSavingRef.current) {
-      return;
-    }
-    
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    saveTimeoutRef.current = setTimeout(() => {
-      if (!isSavingRef.current) {
-        saveData();
-      }
-    }, 10000);
-    
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [currentUser?.id, groups.length, activeGroupId, messages.length, isHydrated, isLoading, saveData]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const activeGroup = useMemo(() => {
     return groups.find(g => g.id === activeGroupId) || null;
   }, [groups, activeGroupId]);
-
-  const createUser = useCallback((name: string, gamerHandle?: string, email?: string) => {
-    const newUser: Player = {
-      id: generateId(),
-      name,
-      gamerHandle: gamerHandle || name.toLowerCase().replace(/\s+/g, '_'),
-      email,
-      joinedAt: new Date().toISOString(),
-      role: 'player',
-      status: 'active',
-      stats: {
-        played: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        cleanSheets: 0,
-        points: 0,
-        winRate: 0,
-        form: [],
-        leaguesWon: 0,
-        knockoutsWon: 0,
-      },
-    };
-    setCurrentUser(newUser);
-    return newUser;
-  }, []);
 
   const createGroup = useCallback(async (name: string, description: string) => {
     if (!currentUser) return null;
@@ -302,7 +83,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     try {
       const inviteCode = generateInviteCode();
       
-      const { data: group, error: groupError } = await supabaseClient
+      const { data: group, error: groupError } = await supabase
         .from('groups')
         .insert({
           name,
@@ -319,7 +100,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         return null;
       }
       
-      const { error: memberError } = await supabaseClient
+      const { error: memberError } = await supabase
         .from('group_members')
         .insert({
           group_id: group.id,
@@ -332,7 +113,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         return null;
       }
       
-      const { error: statsError } = await supabaseClient
+      const { error: statsError } = await supabase
         .from('player_stats')
         .insert({
           player_id: currentUser.id,
@@ -469,7 +250,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     if (!currentUser || !activeGroupId) return;
 
     try {
-      const { data: chatMessage, error } = await supabaseClient
+      const { data: chatMessage, error } = await supabase
         .from('chat_messages')
         .insert({
           group_id: activeGroupId,
@@ -725,13 +506,6 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     console.log('User:', user.name, user.email, user.role);
     console.log('Game data provided:', !!gameData);
     
-    isSavingRef.current = true;
-    
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    
     if (gameData && gameData.groups && gameData.groups.length > 0) {
       console.log('Loading game data with groups:', gameData.groups.length);
       console.log('Active group ID:', gameData.activeGroupId);
@@ -770,25 +544,13 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       setCurrentUser(user);
     }
     
-    setTimeout(() => {
-      isSavingRef.current = false;
-      console.log('Login process complete, saving enabled');
-    }, 500);
-    
     console.log('=== USER LOGIN COMPLETE ===');
   }, []);
 
   const logout = useCallback(async () => {
     console.log('Logging out user...');
     try {
-      await supabaseClient.auth.signOut();
-      
-      await Promise.all([
-        AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_USER),
-        AsyncStorage.removeItem(STORAGE_KEYS.GROUPS),
-        AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_GROUP),
-        AsyncStorage.removeItem(STORAGE_KEYS.MESSAGES),
-      ]);
+      await supabase.auth.signOut();
       
       setCurrentUser(null);
       setGroups([]);
@@ -1032,9 +794,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     activeGroup,
     activeGroupId,
     messages: getGroupMessages(activeGroupId || ''),
-    isLoading: isLoading,
-    isHydrated,
-    createUser,
+    isLoading,
     createGroup,
     joinGroup,
     createCompetition,

@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -9,8 +8,8 @@ import { GameProvider } from "@/hooks/use-game-store";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { useSession } from "@/hooks/use-session";
+import { supabase } from "@/lib/supabase";
 
-// Import once at the root so Supabase works reliably on web/Expo
 import "react-native-url-polyfill/auto";
 
 SplashScreen.preventAutoHideAsync();
@@ -27,7 +26,7 @@ function RootLayoutNav() {
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+      <Stack.Screen name="complete-profile" options={{ headerShown: false }} />
       <Stack.Screen
         name="match-details"
         options={{ title: "Match Details", presentation: "modal" }}
@@ -38,7 +37,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen name="admin" options={{ presentation: "modal" }} />
       <Stack.Screen name="super-admin-login" options={{ presentation: "modal" }} />
-      <Stack.Screen name="auth" options={{ presentation: "modal" }} />
+      <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ presentation: "modal" }} />
       <Stack.Screen name="group-details" options={{ presentation: "modal" }} />
       <Stack.Screen name="group-browser" options={{ presentation: "modal" }} />
@@ -62,7 +61,6 @@ export default function RootLayout() {
   const pathname = usePathname();
   const { user, loading } = useSession();
 
-  // Keep your splash logic
   useEffect(() => {
     const prepare = async () => {
       try {
@@ -77,24 +75,49 @@ export default function RootLayout() {
     prepare();
   }, []);
 
-  // NEW: gate navigation based on Supabase session (no more onboarding)
   useEffect(() => {
     if (!isReady || loading) return;
 
     const inAuth = pathname?.startsWith("/auth");
-    const inOnboarding = pathname === "/onboarding" || pathname?.startsWith("/onboarding");
+    const inCompleteProfile = pathname === "/complete-profile" || pathname?.startsWith("/complete-profile");
     const isRoot = pathname === "/" || pathname === "" || pathname == null;
 
-    if (!user) {
-      // Not signed in → force to /auth (avoid loops)
-      if (!inAuth) router.replace("/auth");
-      return;
+    async function checkProfileCompletion() {
+      if (!user) {
+        if (!inAuth) router.replace("/auth");
+        return;
+      }
+
+      const { data: playerData } = await supabase
+        .from('players')
+        .select('name, gamer_handle')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (playerData && !playerData.name) {
+        if (!inCompleteProfile) {
+          const { data: player } = await supabase
+            .from('players')
+            .select('id')
+            .eq('auth_user_id', user.id)
+            .single();
+          
+          if (player) {
+            router.replace({
+              pathname: '/complete-profile',
+              params: { playerId: player.id },
+            });
+          }
+        }
+        return;
+      }
+
+      if (inAuth || inCompleteProfile || isRoot) {
+        router.replace("/(tabs)/home");
+      }
     }
 
-    // Signed in → avoid /auth and any obsolete onboarding route
-    if (inAuth || inOnboarding || isRoot) {
-      router.replace("/(tabs)/home");
-    }
+    checkProfileCompletion();
   }, [isReady, loading, user, pathname, router]);
 
   if (!isReady) {
