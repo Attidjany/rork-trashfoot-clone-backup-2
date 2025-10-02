@@ -146,21 +146,26 @@ export default function ProfileScreen() {
     }
 
     try {
+      console.log('🔄 Creating group:', groupName);
       const result = await createGroupMutation.mutateAsync({
         name: groupName.trim(),
         description: groupDescription.trim(),
       });
+
+      console.log('✅ Group created:', result);
 
       if (result.success) {
         Alert.alert('Success', `Group "${result.group.name}" created!\n\nInvite Code: ${result.group.inviteCode}`);
         setCreateGroupModal(false);
         setGroupName('');
         setGroupDescription('');
+        console.log('🔄 Refetching user groups...');
         await userGroupsQuery.refetch();
+        console.log('🔄 Setting active group ID:', result.group.id);
         setActiveGroupId(result.group.id);
       }
     } catch (error: any) {
-      console.error('Error creating group:', error);
+      console.error('❌ Error creating group:', error);
       Alert.alert('Error', error?.message || 'Failed to create group');
     }
   };
@@ -172,9 +177,12 @@ export default function ProfileScreen() {
     }
 
     try {
+      console.log('🔄 Joining group with code:', groupCode.trim().toUpperCase());
       const result = await joinGroupMutation.mutateAsync({
         inviteCode: groupCode.trim().toUpperCase(),
       });
+
+      console.log('✅ Join group result:', result);
 
       if (result.success) {
         if (result.alreadyMember) {
@@ -184,11 +192,13 @@ export default function ProfileScreen() {
         }
         setJoinGroupModal(false);
         setGroupCode('');
+        console.log('🔄 Refetching user groups...');
         await userGroupsQuery.refetch();
+        console.log('🔄 Setting active group ID:', result.group.id);
         setActiveGroupId(result.group.id);
       }
     } catch (error: any) {
-      console.error('Error joining group:', error);
+      console.error('❌ Error joining group:', error);
       Alert.alert('Error', error?.message || 'Failed to join group');
     }
   };
@@ -208,10 +218,13 @@ export default function ProfileScreen() {
     }
 
     try {
+      console.log('🔄 Updating profile...');
       const result = await updateProfileMutation.mutateAsync({
         name: editName.trim(),
         gamerHandle: editGamerHandle.trim(),
       });
+
+      console.log('✅ Profile update result:', result);
 
       if (result.success && result.player) {
         if (currentUser) {
@@ -221,6 +234,7 @@ export default function ProfileScreen() {
             gamerHandle: result.player.gamerHandle,
             email: result.player.email,
           };
+          console.log('🔄 Updating game store with new player data:', updatedPlayer);
           setLoggedInUser(updatedPlayer);
         }
         
@@ -242,9 +256,11 @@ export default function ProfileScreen() {
         throw error;
       }
       
-      console.log('✅ Logged out successfully');
+      console.log('✅ Logged out from Supabase');
+      console.log('🔄 Clearing game store state...');
       setLoggedInUser(null);
       setActiveGroupId(null);
+      console.log('🔄 Redirecting to auth...');
       router.replace('/auth');
     } catch (e: any) {
       console.error('❌ Logout error:', e);

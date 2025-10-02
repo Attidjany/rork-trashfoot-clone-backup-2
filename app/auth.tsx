@@ -124,8 +124,52 @@ export default function AuthScreen() {
         
         if (error) throw error;
 
-        if (data.session) {
-          console.log('✅ Login successful, session created');
+        if (data.session && data.user) {
+          console.log('✅ Login successful, checking player record...');
+          
+          const { data: playerData, error: playerError } = await supabase
+            .from('players')
+            .select('*')
+            .eq('auth_user_id', data.user.id)
+            .maybeSingle();
+
+          if (playerError) {
+            console.error('Error fetching player:', playerError);
+          }
+
+          if (!playerData) {
+            console.log('⚠️ Player record not found, creating one...');
+            const defaultHandle = email.trim().split('@')[0];
+            const { data: newPlayer, error: createError } = await supabase
+              .from('players')
+              .insert({
+                auth_user_id: data.user.id,
+                email: email.trim(),
+                name: defaultHandle,
+                gamer_handle: defaultHandle,
+                role: 'player',
+                status: 'active',
+              })
+              .select()
+              .single();
+
+            if (createError || !newPlayer) {
+              console.error('Error creating player:', createError);
+              throw new Error('Failed to create player profile');
+            }
+
+            await supabase
+              .from('player_stats')
+              .insert({
+                player_id: newPlayer.id,
+                group_id: null,
+              });
+            
+            console.log('✅ Player record created successfully');
+          } else {
+            console.log('✅ Player record found:', playerData.name);
+          }
+          
           hasRedirected.current = true;
           setTimeout(() => {
             router.replace('/');
