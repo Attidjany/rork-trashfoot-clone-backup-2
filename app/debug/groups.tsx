@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 type Group = {
   id: string;
   name: string | null;
-  code: string | null;
+  invite_code: string | null;
   is_public: boolean | null;
   created_at: string | null;
 };
@@ -22,7 +22,7 @@ export default function DebugGroups() {
       setError(null);
       const { data, error } = await supabase
         .from('groups')
-        .select('id, name, code, is_public, created_at')
+        .select('id, name, invite_code, is_public, created_at')
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -45,7 +45,7 @@ export default function DebugGroups() {
         <View key={g.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderColor: '#444' }}>
           <Text>ID: {g.id}</Text>
           <Text>Name: {g.name ?? '—'}</Text>
-          <Text>Code: {g.code ?? '—'}</Text>
+          <Text>Invite Code: {g.invite_code ?? '—'}</Text>
           <Text>Public: {String(!!g.is_public)}</Text>
           <Text>Created: {g.created_at ?? '—'}</Text>
         </View>
