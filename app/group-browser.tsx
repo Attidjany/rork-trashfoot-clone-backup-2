@@ -12,13 +12,13 @@ import { Stack, useRouter } from 'expo-router';
 import { 
   Search, 
   Users, 
-  Plus, 
-  Trophy,
+  Plus,
   Calendar,
   ChevronRight,
   X
 } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
+import { trpc } from '@/lib/trpc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -26,13 +26,12 @@ export default function GroupBrowserScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { 
-    currentUser, 
-    groups, 
-    activeGroupId, 
-    setActiveGroupId,
-    joinGroup,
-    createGroup,
+    currentUser,
   } = useGameStore();
+  
+  const publicGroupsQuery = trpc.groups.getPublic.useQuery();
+  const createGroupMutation = trpc.groups.create.useMutation();
+  const joinGroupMutation = trpc.groups.join.useMutation();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [joinModal, setJoinModal] = useState(false);
@@ -59,13 +58,9 @@ export default function GroupBrowserScreen() {
     );
   }
 
-  const userGroupIds = groups
-    .filter(g => g.members.some(m => m.id === currentUser.id))
-    .map(g => g.id);
-
-  const availableGroups = groups.filter(g => !userGroupIds.includes(g.id));
+  const availableGroups = publicGroupsQuery.data || [];
   
-  const filteredGroups = availableGroups.filter(group =>
+  const filteredGroups = availableGroups.filter((group: any) =>
     group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     group.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -75,31 +70,52 @@ export default function GroupBrowserScreen() {
     setJoinModal(true);
   };
 
-  const confirmJoinGroup = () => {
-    if (selectedGroup) {
-      const result = joinGroup(selectedGroup.inviteCode);
-      if (result) {
+  const confirmJoinGroup = async () => {
+    if (!selectedGroup) return;
+
+    try {
+      const result = await joinGroupMutation.mutateAsync({
+        inviteCode: selectedGroup.inviteCode,
+      });
+
+      if (result.success) {
         setJoinModal(false);
         setSelectedGroup(null);
-        console.log('Successfully joined group:', result.name);
+        console.log('Successfully joined group:', result.group.name);
+        publicGroupsQuery.refetch();
         router.back();
-      } else {
-        console.log('Failed to join group');
       }
+    } catch (error: any) {
+      console.error('Error joining group:', error);
+      alert(error?.message || 'Failed to join group');
     }
   };
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (!groupName.trim()) {
       console.log('Please enter a group name');
       return;
     }
     
-    createGroup(groupName.trim(), groupDescription.trim());
-    setCreateModal(false);
-    setGroupName('');
-    setGroupDescription('');
-    router.back();
+    try {
+      const result = await createGroupMutation.mutateAsync({
+        name: groupName.trim(),
+        description: groupDescription.trim(),
+      });
+
+      if (result.success) {
+        setCreateModal(false);
+        setGroupName('');
+        setGroupDescription('');
+        console.log('Group created:', result.group.name);
+        alert(`Group created!\n\nInvite Code: ${result.group.inviteCode}`);
+        publicGroupsQuery.refetch();
+        router.back();
+      }
+    } catch (error: any) {
+      console.error('Error creating group:', error);
+      alert(error?.message || 'Failed to create group');
+    }
   };
 
   return (
@@ -153,7 +169,7 @@ export default function GroupBrowserScreen() {
               </Text>
             </View>
           ) : (
-            filteredGroups.map(group => (
+            filteredGroups.map((group: any) => (
               <TouchableOpacity
                 key={group.id}
                 style={styles.groupCard}
@@ -177,13 +193,7 @@ export default function GroupBrowserScreen() {
                     <View style={styles.statItem}>
                       <Users size={16} color="#0EA5E9" />
                       <Text style={styles.statText}>
-                        {group.members.length} members
-                      </Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Trophy size={16} color="#8B5CF6" />
-                      <Text style={styles.statText}>
-                        {group.competitions.length} competitions
+                        {group.memberCount || 0} members
                       </Text>
                     </View>
                     <View style={styles.statItem}>
@@ -234,7 +244,7 @@ export default function GroupBrowserScreen() {
                     {selectedGroup.description || 'No description'}
                   </Text>
                   <Text style={styles.previewStats}>
-                    {selectedGroup.members.length} members • {selectedGroup.competitions.length} competitions
+                    {selectedGroup.memberCount || 0} members
                   </Text>
                 </View>
                 
@@ -252,8 +262,11 @@ export default function GroupBrowserScreen() {
                   <TouchableOpacity
                     style={styles.confirmButton}
                     onPress={confirmJoinGroup}
+                    disabled={joinGroupMutation.isPending}
                   >
-                    <Text style={styles.confirmButtonText}>Join Group</Text>
+                    <Text style={styles.confirmButtonText}>
+                      {joinGroupMutation.isPending ? 'Joining...' : 'Join Group'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -313,8 +326,11 @@ export default function GroupBrowserScreen() {
               <TouchableOpacity
                 style={styles.confirmButton}
                 onPress={handleCreateGroup}
+                disabled={createGroupMutation.isPending}
               >
-                <Text style={styles.confirmButtonText}>Create</Text>
+                <Text style={styles.confirmButtonText}>
+                  {createGroupMutation.isPending ? 'Creating...' : 'Create'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
