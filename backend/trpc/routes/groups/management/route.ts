@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { publicProcedure, protectedProcedure } from "../../../create-context";
-import { supabaseAdmin } from "../../../lib/supabase-server";
+import { supabaseAdmin } from "../../lib/supabase-server";
 
 function generateInviteCode(): string {
   return Math.random().toString(36).substr(2, 8).toUpperCase();
@@ -94,7 +94,7 @@ export const createGroupProcedure = protectedProcedure
         description: input.description || '',
         admin_id: player.id,
         invite_code: inviteCode,
-        is_public: false,
+        is_public: true,
       })
       .select()
       .single();
@@ -320,5 +320,81 @@ export const manageGroupMemberProcedure = publicProcedure
     return {
       success: true,
       message: actionMessages[input.action],
+    };
+  });
+
+export const getGroupDetailsProcedure = protectedProcedure
+  .input(
+    z.object({
+      groupId: z.string(),
+    })
+  )
+  .query(async ({ input, ctx }) => {
+    const userId = ctx.user?.id;
+    if (!userId) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: player } = await supabaseAdmin
+      .from('players')
+      .select('id')
+      .eq('auth_user_id', userId)
+      .single();
+
+    if (!player) {
+      throw new Error('Player not found');
+    }
+
+    const { data: group, error: groupError } = await supabaseAdmin
+      .from('groups')
+      .select('*')
+      .eq('id', input.groupId)
+      .single();
+
+    if (groupError || !group) {
+      console.error('Error fetching group:', groupError);
+      throw new Error('Group not found');
+    }
+
+    const { data: members } = await supabaseAdmin
+      .from('group_members')
+      .select(`
+        player_id,
+        is_admin,
+        players (
+          id,
+          name,
+          gamer_handle,
+          email,
+          role,
+          status,
+          joined_at
+        )
+      `)
+      .eq('group_id', input.groupId);
+
+    const isMember = members?.some((m: any) => m.player_id === player.id);
+    if (!isMember) {
+      throw new Error('You are not a member of this group');
+    }
+
+    return {
+      id: group.id,
+      name: group.name,
+      description: group.description || '',
+      inviteCode: group.invite_code,
+      adminId: group.admin_id,
+      isPublic: group.is_public,
+      createdAt: group.created_at,
+      members: (members || []).map((m: any) => ({
+        id: m.players.id,
+        name: m.players.name,
+        gamerHandle: m.players.gamer_handle,
+        email: m.players.email,
+        role: m.players.role,
+        status: m.players.status,
+        joinedAt: m.players.joined_at,
+        isAdmin: m.is_admin,
+      })),
     };
   });

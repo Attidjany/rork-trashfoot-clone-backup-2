@@ -38,6 +38,7 @@ export default function ProfileScreen() {
   const {
     currentUser,
     setLoggedInUser,
+    setActiveGroupId,
   } = useGameStore();
 
   const { user, loading } = useSession();
@@ -155,7 +156,8 @@ export default function ProfileScreen() {
         setCreateGroupModal(false);
         setGroupName('');
         setGroupDescription('');
-        userGroupsQuery.refetch();
+        await userGroupsQuery.refetch();
+        setActiveGroupId(result.group.id);
       }
     } catch (error: any) {
       console.error('Error creating group:', error);
@@ -182,7 +184,8 @@ export default function ProfileScreen() {
         }
         setJoinGroupModal(false);
         setGroupCode('');
-        userGroupsQuery.refetch();
+        await userGroupsQuery.refetch();
+        setActiveGroupId(result.group.id);
       }
     } catch (error: any) {
       console.error('Error joining group:', error);
