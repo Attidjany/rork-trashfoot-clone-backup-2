@@ -4,10 +4,12 @@ import { useRouter } from 'expo-router';
 import { useSession } from '@/hooks/use-session';
 import { supabase } from '@/lib/supabase';
 import { trpc } from '@/lib/trpc';
+import { useGameStore } from '@/hooks/use-game-store';
 
 export default function Index() {
   const router = useRouter();
   const { user, loading } = useSession();
+  const { setLoggedInUser } = useGameStore();
   const hasRedirected = useRef(false);
   
   const backendTest = trpc.example.hi.useQuery(
@@ -45,7 +47,7 @@ export default function Index() {
 
       const { data: playerData, error: playerError } = await supabase
         .from('players')
-        .select('id, name, gamer_handle')
+        .select('*')
         .eq('auth_user_id', user.id)
         .maybeSingle();
 
@@ -73,13 +75,60 @@ export default function Index() {
         return;
       }
 
-      console.log('Index: User authenticated and profile complete, redirecting to home');
+      console.log('Index: User authenticated and profile complete, loading game data...');
+      
+      const { data: globalStats } = await supabase
+        .from('player_stats')
+        .select('*')
+        .eq('player_id', playerData.id)
+        .is('group_id', null)
+        .maybeSingle();
+
+      const player = {
+        id: playerData.id,
+        name: playerData.name,
+        gamerHandle: playerData.gamer_handle,
+        email: playerData.email,
+        role: playerData.role as 'player' | 'admin' | 'super_admin',
+        status: playerData.status as 'active' | 'suspended' | 'banned',
+        joinedAt: playerData.joined_at,
+        stats: globalStats ? {
+          played: globalStats.played,
+          wins: globalStats.wins,
+          draws: globalStats.draws,
+          losses: globalStats.losses,
+          goalsFor: globalStats.goals_for,
+          goalsAgainst: globalStats.goals_against,
+          cleanSheets: globalStats.clean_sheets,
+          points: globalStats.points,
+          winRate: parseFloat(globalStats.win_rate),
+          form: globalStats.form || [],
+          leaguesWon: globalStats.leagues_won,
+          knockoutsWon: globalStats.knockouts_won,
+        } : {
+          played: 0,
+          wins: 0,
+          draws: 0,
+          losses: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          cleanSheets: 0,
+          points: 0,
+          winRate: 0,
+          form: [],
+          leaguesWon: 0,
+          knockoutsWon: 0,
+        },
+      };
+
+      console.log('Index: Setting logged in user and redirecting to home');
+      setLoggedInUser(player);
       hasRedirected.current = true;
       router.replace('/(tabs)/home');
     }
 
     checkAndRedirect();
-  }, [user, loading, router]);
+  }, [user, loading, router, setLoggedInUser]);
 
   console.log('Index render - loading:', loading, 'user:', !!user);
 

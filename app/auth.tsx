@@ -16,8 +16,6 @@ import { Mail, Lock, Eye, EyeOff, Gamepad2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
-import { trpc } from '@/lib/trpc';
-import { useGameStore } from '@/hooks/use-game-store';
 import { useSession } from '@/hooks/use-session';
 
 type AuthMode = 'login' | 'signup';
@@ -25,7 +23,6 @@ type AuthMode = 'login' | 'signup';
 export default function AuthScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setLoggedInUser } = useGameStore();
   const { user, loading: sessionLoading } = useSession();
   const hasRedirected = useRef(false);
 
@@ -35,13 +32,11 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const loginMutation = trpc.auth.login.useMutation();
-
   useEffect(() => {
     if (!sessionLoading && user && !hasRedirected.current && !isLoading) {
-      console.log('Auth page: User already logged in, redirecting...');
+      console.log('Auth page: User already logged in, redirecting to index...');
       hasRedirected.current = true;
-      router.replace('/(tabs)/home');
+      router.replace('/');
     }
   }, [user, sessionLoading, router, isLoading]);
 
@@ -115,32 +110,9 @@ export default function AuthScreen() {
               params: { playerId: playerData.id },
             });
           } else {
-            const player = {
-              id: playerData.id,
-              name: playerData.name,
-              gamerHandle: playerData.gamer_handle,
-              email: playerData.email,
-              role: playerData.role as 'player' | 'admin' | 'super_admin',
-              status: playerData.status as 'active' | 'suspended' | 'banned',
-              joinedAt: playerData.joined_at,
-              stats: {
-                played: 0,
-                wins: 0,
-                draws: 0,
-                losses: 0,
-                goalsFor: 0,
-                goalsAgainst: 0,
-                cleanSheets: 0,
-                points: 0,
-                winRate: 0,
-                form: [],
-                leaguesWon: 0,
-                knockoutsWon: 0,
-              },
-            };
-            setLoggedInUser(player);
+            console.log('✅ Signup complete, redirecting to index for routing...');
             hasRedirected.current = true;
-            router.replace('/(tabs)/home');
+            router.replace('/');
           }
         } else {
           Alert.alert(
@@ -182,22 +154,9 @@ export default function AuthScreen() {
             return;
           }
 
-          console.log('🔄 Fetching full game data...');
-          const loginResult = await loginMutation.mutateAsync({
-            email: email.trim(),
-            password: password.trim(),
-          });
-
-          if (loginResult.user && loginResult.gameData) {
-            console.log('✅ Game data loaded, setting user...');
-            setLoggedInUser(loginResult.user, loginResult.gameData);
-            console.log('✅ Redirecting to home...');
-            hasRedirected.current = true;
-            router.replace('/(tabs)/home');
-          } else {
-            console.error('❌ Login result missing data');
-            throw new Error('Failed to load game data');
-          }
+          console.log('✅ Login successful, redirecting to index for routing...');
+          hasRedirected.current = true;
+          router.replace('/');
         }
       }
     } catch (err: any) {
