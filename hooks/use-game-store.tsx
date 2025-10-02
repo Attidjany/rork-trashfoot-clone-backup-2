@@ -1,4 +1,4 @@
-import createContextHook from '@nkzw/create-context-hook';
+import createContextHook from '@nkzw/create-context-hook'; 
 import { useState, useMemo, useCallback } from 'react';
 import { Player, Group, Competition, Match, ChatMessage, PlayerStats, KnockoutBracket, TournamentRound } from '@/types/game';
 import { supabase } from '@/lib/supabase';
@@ -77,60 +77,74 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     return groups.find(g => g.id === activeGroupId) || null;
   }, [groups, activeGroupId]);
 
+  // UPDATED: uses Supabase auth as source of truth; still updates local state
   const createGroup = useCallback(async (name: string, description: string) => {
-    if (!currentUser) return null;
-
     try {
+      // Source of truth: Supabase session (works even if store user isn't hydrated yet)
+      const { data: uData, error: uErr } = await supabase.auth.getUser();
+      if (uErr) throw uErr;
+      if (!uData?.user) {
+        console.error('createGroup: no Supabase user');
+        return null;
+      }
+      const adminId = uData.user.id;
+
       const inviteCode = generateInviteCode();
-      
+
+      // 1) Insert group
       const { data: group, error: groupError } = await supabase
         .from('groups')
         .insert({
           name,
           description,
-          admin_id: currentUser.id,
-          invite_code: inviteCode,
+          admin_id: adminId,          // IMPORTANT for RLS
+          invite_code: inviteCode,    // IMPORTANT: use invite_code
           is_public: false,
         })
         .select()
         .single();
-      
+
       if (groupError || !group) {
         console.error('Error creating group:', groupError);
         return null;
       }
-      
+
+      // 2) Insert membership (creator is admin)
       const { error: memberError } = await supabase
         .from('group_members')
         .insert({
           group_id: group.id,
-          player_id: currentUser.id,
+          player_id: adminId,
           is_admin: true,
+          role: 'admin',
         });
-      
-      if (memberError) {
+
+      // ignore duplicate membership if any
+      if (memberError && String((memberError as any).code) !== '23505') {
         console.error('Error adding member:', memberError);
         return null;
       }
-      
+
+      // 3) (Optional) Create player stats row
       const { error: statsError } = await supabase
         .from('player_stats')
         .insert({
-          player_id: currentUser.id,
+          player_id: adminId,
           group_id: group.id,
         });
-      
+
       if (statsError) {
         console.error('Error creating stats:', statsError);
       }
-      
+
+      // Build local Group object (members list uses currentUser if available)
       const newGroup: Group = {
         id: group.id,
         name: group.name,
         description: group.description || '',
         adminId: group.admin_id,
         adminIds: [group.admin_id],
-        members: [currentUser],
+        members: currentUser ? [currentUser] : [], // fallback: empty if not hydrated yet
         createdAt: group.created_at,
         competitions: [],
         inviteCode: group.invite_code,
@@ -147,28 +161,89 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     }
   }, [currentUser]);
 
-  const joinGroup = useCallback((inviteCode: string) => {
-    if (!currentUser) return null;
+  // UPDATED: hits Supabase (lookup by invite_code + insert into group_members)
+  const joinGroup = useCallback(async (inviteCode: string) => {
+    try {
+      const code = (inviteCode || '').trim().toUpperCase();
 
-    const group = groups.find(g => g.inviteCode === inviteCode);
-    if (!group) return null;
-
-    if (group.members.find(m => m.id === currentUser.id)) {
-      setActiveGroupId(group.id);
-      return group;
-    }
-
-    setGroups(prev => prev.map(g => {
-      if (g.id === group.id) {
-        return {
-          ...g,
-          members: [...g.members, currentUser],
-        };
+      const { data: uData, error: uErr } = await supabase.auth.getUser();
+      if (uErr) throw uErr;
+      if (!uData?.user) {
+        console.error('joinGroup: no Supabase user');
+        return null;
       }
-      return g;
-    }));
-    setActiveGroupId(group.id);
-    return group;
+      const playerId = uData.user.id;
+
+      // 1) Find the group by invite_code
+      const { data: group, error: gErr } = await supabase
+        .from('groups')
+        .select('id, name, description, admin_id, invite_code, is_public, created_at')
+        .eq('invite_code', code)
+        .single();
+
+      if (gErr || !group) {
+        console.error('Error finding group:', gErr);
+        return null;
+      }
+
+      // 2) Insert membership
+      const { error: gmErr } = await supabase
+        .from('group_members')
+        .insert({ group_id: group.id, player_id: playerId, is_admin: false, role: 'member' });
+
+      if (gmErr && String((gmErr as any).code) !== '23505') {
+        console.error('Error joining group:', gmErr);
+        return null;
+      }
+
+      // 3) (Optional) Ensure stats row exists
+      const { error: statsErr } = await supabase
+        .from('player_stats')
+        .insert({ player_id: playerId, group_id: group.id })
+        .select()
+        .single();
+
+      // ignore unique violation if already exists
+      if (statsErr && String((statsErr as any).code) !== '23505') {
+        console.error('Error creating stats for member:', statsErr);
+      }
+
+      // 4) Reflect in local store (add/merge)
+      const joined: Group = {
+        id: group.id,
+        name: group.name,
+        description: group.description || '',
+        adminId: group.admin_id,
+        adminIds: [group.admin_id],
+        members: currentUser ? [currentUser] : [], // we don't yet fetch other members here
+        createdAt: group.created_at,
+        competitions: [],
+        inviteCode: group.invite_code,
+        isPublic: group.is_public,
+        pendingMembers: [],
+      };
+
+      setGroups(prev => {
+        const exists = prev.some(g => g.id === joined.id);
+        if (exists) {
+          return prev.map(g => {
+            if (g.id !== joined.id) return g;
+            // add currentUser to members if not present
+            if (currentUser && !g.members.some(m => m.id === currentUser.id)) {
+              return { ...g, members: [...g.members, currentUser] };
+            }
+            return g;
+            });
+        }
+        return [...prev, joined];
+      });
+
+      setActiveGroupId(joined.id);
+      return joined;
+    } catch (error) {
+      console.error('Error joining group:', error);
+      return null;
+    }
   }, [currentUser, groups]);
 
   const createCompetition = useCallback((
@@ -540,7 +615,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       setActiveGroupId(null);
       setMessages([]);
       
-      console.log('Setting current user:', user.name);
+      console.log('Setting current user:', user);
       setCurrentUser(user);
     }
     
