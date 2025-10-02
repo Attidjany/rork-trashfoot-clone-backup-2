@@ -79,11 +79,14 @@ export default function AuthScreen() {
           }
 
           if (!playerData) {
+            const defaultHandle = email.trim().split('@')[0];
             const { data: newPlayer, error: createError } = await supabase
               .from('players')
               .insert({
                 auth_user_id: data.user.id,
                 email: email.trim(),
+                name: defaultHandle,
+                gamer_handle: defaultHandle,
                 role: 'player',
                 status: 'active',
               })
@@ -101,21 +104,11 @@ export default function AuthScreen() {
                 player_id: newPlayer.id,
                 group_id: null,
               });
-
-            router.replace({
-              pathname: '/complete-profile',
-              params: { playerId: newPlayer.id },
-            });
-          } else if (!playerData.name || !playerData.gamer_handle) {
-            router.replace({
-              pathname: '/complete-profile',
-              params: { playerId: playerData.id },
-            });
-          } else {
-            console.log('✅ Signup complete, redirecting to index for routing...');
-            hasRedirected.current = true;
-            router.replace('/');
           }
+          
+          console.log('✅ Signup complete, redirecting to index for routing...');
+          hasRedirected.current = true;
+          router.replace('/');
         } else {
           Alert.alert(
             'Check your email',

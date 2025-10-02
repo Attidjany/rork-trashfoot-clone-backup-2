@@ -65,17 +65,7 @@ export default function Index() {
         return;
       }
 
-      if (!playerData.name || !playerData.gamer_handle) {
-        console.log('Index: Profile incomplete, redirecting to complete-profile');
-        hasRedirected.current = true;
-        router.replace({
-          pathname: '/complete-profile',
-          params: { playerId: playerData.id },
-        });
-        return;
-      }
-
-      console.log('Index: User authenticated and profile complete, loading game data...');
+      console.log('Index: User authenticated, loading game data...');
       
       const { data: globalStats } = await supabase
         .from('player_stats')
@@ -86,8 +76,8 @@ export default function Index() {
 
       const player = {
         id: playerData.id,
-        name: playerData.name,
-        gamerHandle: playerData.gamer_handle,
+        name: playerData.name || user.email?.split('@')[0] || 'Player',
+        gamerHandle: playerData.gamer_handle || user.email?.split('@')[0] || 'player',
         email: playerData.email,
         role: playerData.role as 'player' | 'admin' | 'super_admin',
         status: playerData.status as 'active' | 'suspended' | 'banned',
