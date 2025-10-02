@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { publicProcedure } from "@/backend/trpc/create-context";
-import { supabaseAdmin } from "@/backend/lib/supabase-server";
-import { Player } from "@/types/game";
+import { publicProcedure } from "../../../create-context";
+import { supabaseAdmin } from "../../../../lib/supabase-server";
+import { Player } from "../../../../../types/game";
 
 export const registerProcedure = publicProcedure
   .input(

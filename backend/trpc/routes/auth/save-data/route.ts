@@ -1,8 +1,5 @@
 import { z } from "zod";
-import { publicProcedure } from "@/backend/trpc/create-context";
-
-// Import shared storage
-import { userDataStorage } from "@/backend/trpc/shared/storage";
+import { publicProcedure } from "../../../create-context";
 
 export const saveUserDataProcedure = publicProcedure
   .input(
@@ -17,7 +14,7 @@ export const saveUserDataProcedure = publicProcedure
     })
   )
   .mutation(async ({ input }) => {
-    console.log('Saving user data for:', input.email);
+    console.log('Save user data called for:', input.email);
     console.log('Data includes:', {
       user: input.gameData.currentUser?.name,
       groupsCount: input.gameData.groups?.length || 0,
@@ -25,30 +22,8 @@ export const saveUserDataProcedure = publicProcedure
       messagesCount: input.gameData.messages?.length || 0,
     });
     
-    // Ensure we're saving complete data
-    const dataToSave = {
-      user: input.gameData.currentUser,
-      gameData: {
-        currentUser: input.gameData.currentUser,
-        groups: input.gameData.groups || [],
-        activeGroupId: input.gameData.activeGroupId || '',
-        messages: input.gameData.messages || [],
-      },
-      lastUpdated: new Date().toISOString(),
-    };
-    
-    userDataStorage.set(input.email, dataToSave);
-    console.log('Successfully saved data for:', input.email);
-    console.log('Data summary:', {
-      groupsCount: dataToSave.gameData.groups.length,
-      messagesCount: dataToSave.gameData.messages.length,
-      activeGroupId: dataToSave.gameData.activeGroupId,
-      lastUpdated: dataToSave.lastUpdated
-    });
-    console.log('Storage now has keys:', Array.from(userDataStorage.keys()));
-    
     return {
       success: true,
-      message: "User data saved successfully",
+      message: "User data acknowledged (serverless - no persistent storage)",
     };
   });

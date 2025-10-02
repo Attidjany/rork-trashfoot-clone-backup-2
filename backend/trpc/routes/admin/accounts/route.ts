@@ -1,33 +1,37 @@
 import { z } from "zod";
-import { publicProcedure } from "@/backend/trpc/create-context";
-import { 
-  getAllAccounts, 
-  deleteAccount, 
-  isDummyAccount,
-  isRealAccount,
-  getAllDummyAccounts,
-  getAllRealAccounts
-} from "@/backend/trpc/shared/storage";
+import { publicProcedure } from "../../../create-context";
+import { supabaseAdmin } from "../../../../lib/supabase-server";
 
-// Get all accounts (dummy and real)
 export const getAllAccountsProcedure = publicProcedure
   .query(async () => {
     try {
       console.log('=== GET ALL ACCOUNTS ===');
       
-      const accounts = getAllAccounts();
+      const { data: players, error } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .order('joined_at', { ascending: false });
       
-      console.log('Dummy accounts:', accounts.dummy.length);
-      console.log('Real accounts:', accounts.real.length);
+      if (error) {
+        console.error('Error fetching accounts:', error);
+        throw new Error('Failed to fetch accounts');
+      }
+      
+      const accounts = players || [];
       
       return {
         success: true,
         data: {
-          dummyAccounts: accounts.dummy,
-          realAccounts: accounts.real,
-          totalDummy: accounts.dummy.length,
-          totalReal: accounts.real.length,
-          totalAccounts: accounts.dummy.length + accounts.real.length
+          accounts: accounts.map(p => ({
+            id: p.id,
+            name: p.name,
+            email: p.email,
+            gamerHandle: p.gamer_handle,
+            role: p.role,
+            status: p.status,
+            joinedAt: p.joined_at,
+          })),
+          totalAccounts: accounts.length
         }
       };
     } catch (error) {
@@ -36,48 +40,46 @@ export const getAllAccountsProcedure = publicProcedure
     }
   });
 
-// Delete account (dummy or real)
 export const deleteAccountProcedure = publicProcedure
   .input(
     z.object({
-      email: z.string().email("Invalid email address"),
-      accountType: z.enum(['dummy', 'real']).optional()
+      playerId: z.string(),
     })
   )
   .mutation(async ({ input }) => {
     try {
       console.log('=== DELETE ACCOUNT ===');
-      console.log('Email:', input.email);
-      console.log('Account type:', input.accountType);
+      console.log('Player ID:', input.playerId);
       
-      if (!input.email?.trim()) {
-        throw new Error('Email is required');
+      const { data: player, error: fetchError } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .eq('id', input.playerId)
+        .single();
+      
+      if (fetchError || !player) {
+        throw new Error('Account not found');
       }
       
-      const email = input.email.trim();
+      const { error: deleteError } = await supabaseAdmin
+        .from('players')
+        .delete()
+        .eq('id', input.playerId);
       
-      // Verify account type if provided
-      if (input.accountType) {
-        if (input.accountType === 'dummy' && !isDummyAccount(email)) {
-          throw new Error('Account is not a dummy account');
-        }
-        if (input.accountType === 'real' && !isRealAccount(email)) {
-          throw new Error('Account is not a real account');
-        }
+      if (deleteError) {
+        throw new Error('Failed to delete account');
       }
       
-      const deleted = deleteAccount(email);
-      
-      if (!deleted) {
-        throw new Error('Account not found or could not be deleted');
+      if (player.auth_user_id) {
+        await supabaseAdmin.auth.admin.deleteUser(player.auth_user_id);
       }
       
-      console.log('Successfully deleted account:', email);
+      console.log('Successfully deleted account:', player.email);
       
       return {
         success: true,
-        message: `Account ${email} has been deleted successfully`,
-        deletedEmail: email
+        message: `Account ${player.email} has been deleted successfully`,
+        deletedEmail: player.email
       };
     } catch (error) {
       console.error('Delete account error:', error);
@@ -85,25 +87,32 @@ export const deleteAccountProcedure = publicProcedure
     }
   });
 
-// Get account statistics
 export const getAccountStatsProcedure = publicProcedure
   .query(async () => {
     try {
       console.log('=== GET ACCOUNT STATS ===');
       
-      const dummyAccounts = getAllDummyAccounts();
-      const realAccounts = getAllRealAccounts();
+      const { data: players, error } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .order('joined_at', { ascending: false });
+      
+      if (error) {
+        throw new Error('Failed to fetch account statistics');
+      }
+      
+      const totalAccounts = players?.length || 0;
+      const recentAccounts = players?.slice(0, 5) || [];
       
       const stats = {
-        totalAccounts: dummyAccounts.length + realAccounts.length,
-        dummyAccounts: dummyAccounts.length,
-        realAccounts: realAccounts.length,
-        dummyPercentage: dummyAccounts.length > 0 ? 
-          Math.round((dummyAccounts.length / (dummyAccounts.length + realAccounts.length)) * 100) : 0,
-        realPercentage: realAccounts.length > 0 ? 
-          Math.round((realAccounts.length / (dummyAccounts.length + realAccounts.length)) * 100) : 0,
-        recentDummyAccounts: dummyAccounts.slice(0, 5),
-        recentRealAccounts: realAccounts.slice(0, 5)
+        totalAccounts,
+        recentAccounts: recentAccounts.map(p => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          gamerHandle: p.gamer_handle,
+          joinedAt: p.joined_at,
+        }))
       };
       
       console.log('Account stats:', stats);
@@ -118,55 +127,56 @@ export const getAccountStatsProcedure = publicProcedure
     }
   });
 
-// Bulk delete accounts
 export const bulkDeleteAccountsProcedure = publicProcedure
   .input(
     z.object({
-      emails: z.array(z.string().email()),
-      accountType: z.enum(['dummy', 'real', 'all']).optional()
+      playerIds: z.array(z.string()),
     })
   )
   .mutation(async ({ input }) => {
     try {
       console.log('=== BULK DELETE ACCOUNTS ===');
-      console.log('Emails:', input.emails);
-      console.log('Account type filter:', input.accountType);
+      console.log('Player IDs:', input.playerIds);
       
-      if (!input.emails || input.emails.length === 0) {
-        throw new Error('No emails provided for deletion');
+      if (!input.playerIds || input.playerIds.length === 0) {
+        throw new Error('No player IDs provided for deletion');
       }
       
       const results = {
         deleted: [] as string[],
         failed: [] as string[],
-        skipped: [] as string[]
       };
       
-      for (const email of input.emails) {
-        if (!email?.trim()) {
-          results.failed.push(email);
-          continue;
-        }
-        
-        const cleanEmail = email.trim();
-        
-        // Apply account type filter if specified
-        if (input.accountType && input.accountType !== 'all') {
-          if (input.accountType === 'dummy' && !isDummyAccount(cleanEmail)) {
-            results.skipped.push(cleanEmail);
+      for (const playerId of input.playerIds) {
+        try {
+          const { data: player } = await supabaseAdmin
+            .from('players')
+            .select('*')
+            .eq('id', playerId)
+            .single();
+          
+          if (!player) {
+            results.failed.push(playerId);
             continue;
           }
-          if (input.accountType === 'real' && !isRealAccount(cleanEmail)) {
-            results.skipped.push(cleanEmail);
+          
+          const { error: deleteError } = await supabaseAdmin
+            .from('players')
+            .delete()
+            .eq('id', playerId);
+          
+          if (deleteError) {
+            results.failed.push(playerId);
             continue;
           }
-        }
-        
-        const deleted = deleteAccount(cleanEmail);
-        if (deleted) {
-          results.deleted.push(cleanEmail);
-        } else {
-          results.failed.push(cleanEmail);
+          
+          if (player.auth_user_id) {
+            await supabaseAdmin.auth.admin.deleteUser(player.auth_user_id);
+          }
+          
+          results.deleted.push(playerId);
+        } catch (error) {
+          results.failed.push(playerId);
         }
       }
       
@@ -174,7 +184,7 @@ export const bulkDeleteAccountsProcedure = publicProcedure
       
       return {
         success: true,
-        message: `Bulk delete completed. Deleted: ${results.deleted.length}, Failed: ${results.failed.length}, Skipped: ${results.skipped.length}`,
+        message: `Bulk delete completed. Deleted: ${results.deleted.length}, Failed: ${results.failed.length}`,
         results
       };
     } catch (error) {
