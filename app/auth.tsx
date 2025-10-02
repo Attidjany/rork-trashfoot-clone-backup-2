@@ -36,7 +36,9 @@ export default function AuthScreen() {
     if (!sessionLoading && user && !hasRedirected.current) {
       console.log('Auth page: User already logged in, redirecting to index...');
       hasRedirected.current = true;
-      router.replace('/');
+      setTimeout(() => {
+        router.replace('/');
+      }, 100);
     }
   }, [user, sessionLoading, router]);
 
@@ -132,6 +134,9 @@ export default function AuthScreen() {
         if (data.session) {
           console.log('✅ Login successful, session created');
           hasRedirected.current = true;
+          setTimeout(() => {
+            router.replace('/');
+          }, 100);
         }
       }
     } catch (err: any) {
