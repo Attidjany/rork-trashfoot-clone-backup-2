@@ -110,20 +110,19 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       }
 
       // 2) Insert membership (creator is admin)
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .insert({
-          group_id: group.id,
-          player_id: adminId,
-          is_admin: true,
-          role: 'admin',
-        });
+const { error: memberError } = await supabase
+  .from('group_members')
+  .insert({
+    group_id: group.id,
+    player_id: adminId,
+    is_admin: true,   // keep this; your schema has it
+  });
 
-      // ignore duplicate membership if any
-      if (memberError && String((memberError as any).code) !== '23505') {
-        console.error('Error adding member:', memberError);
-        return null;
-      }
+// ignore duplicate membership if any
+if (memberError && String((memberError as any).code) !== '23505') {
+  console.error('Error adding member:', memberError);
+  return null;
+}
 
       // 3) (Optional) Create player stats row
       const { error: statsError } = await supabase
@@ -187,15 +186,18 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       }
 
       // 2) Insert membership
-      const { error: gmErr } = await supabase
-        .from('group_members')
-        .insert({ group_id: group.id, player_id: playerId, is_admin: false, role: 'member' });
+const { error: gmErr } = await supabase
+  .from('group_members')
+  .insert({
+    group_id: group.id,
+    player_id: playerId,
+    is_admin: false,  // regular member
+  });
 
-      if (gmErr && String((gmErr as any).code) !== '23505') {
-        console.error('Error joining group:', gmErr);
-        return null;
-      }
-
+if (gmErr && String((gmErr as any).code) !== '23505') {
+  console.error('Error joining group:', gmErr);
+  return null;
+}
       // 3) (Optional) Ensure stats row exists
       const { error: statsErr } = await supabase
         .from('player_stats')
