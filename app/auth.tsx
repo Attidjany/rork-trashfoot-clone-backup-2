@@ -38,12 +38,12 @@ export default function AuthScreen() {
   const loginMutation = trpc.auth.login.useMutation();
 
   useEffect(() => {
-    if (!sessionLoading && user && !hasRedirected.current) {
+    if (!sessionLoading && user && !hasRedirected.current && !isLoading) {
       console.log('Auth page: User already logged in, redirecting...');
       hasRedirected.current = true;
       router.replace('/');
     }
-  }, [user, sessionLoading, router]);
+  }, [user, sessionLoading, router, isLoading]);
 
   async function handleAuth() {
     if (!email.trim()) {
@@ -139,6 +139,7 @@ export default function AuthScreen() {
               },
             };
             setLoggedInUser(player);
+            hasRedirected.current = true;
             router.replace('/(tabs)/home');
           }
         } else {
@@ -191,6 +192,7 @@ export default function AuthScreen() {
             console.log('✅ Game data loaded, setting user...');
             setLoggedInUser(loginResult.user, loginResult.gameData);
             console.log('✅ Redirecting to home...');
+            hasRedirected.current = true;
             router.replace('/(tabs)/home');
           } else {
             console.error('❌ Login result missing data');
