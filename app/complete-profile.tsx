@@ -69,66 +69,72 @@ export default function CompleteProfileScreen() {
       });
 
       if (result.success && result.player) {
-        const { data: authSession } = await supabase.auth.getSession();
+        console.log('✅ Profile updated successfully:', result.player);
         
-        if (authSession?.session?.user) {
-          const { data: playerData } = await supabase
-            .from('players')
+        const { data: playerData } = await supabase
+          .from('players')
+          .select('*')
+          .eq('id', params.playerId)
+          .single();
+
+        if (playerData) {
+          console.log('✅ Player data fetched:', playerData.name, playerData.gamer_handle);
+          
+          const { data: globalStats } = await supabase
+            .from('player_stats')
             .select('*')
-            .eq('id', params.playerId)
-            .single();
+            .eq('player_id', playerData.id)
+            .is('group_id', null)
+            .maybeSingle();
 
-          if (playerData) {
-            const { data: globalStats } = await supabase
-              .from('player_stats')
-              .select('*')
-              .eq('player_id', playerData.id)
-              .is('group_id', null)
-              .single();
+          const player = {
+            id: playerData.id,
+            name: playerData.name,
+            gamerHandle: playerData.gamer_handle,
+            email: playerData.email,
+            role: playerData.role as 'player' | 'admin' | 'super_admin',
+            status: playerData.status as 'active' | 'suspended' | 'banned',
+            joinedAt: playerData.joined_at,
+            stats: globalStats ? {
+              played: globalStats.played,
+              wins: globalStats.wins,
+              draws: globalStats.draws,
+              losses: globalStats.losses,
+              goalsFor: globalStats.goals_for,
+              goalsAgainst: globalStats.goals_against,
+              cleanSheets: globalStats.clean_sheets,
+              points: globalStats.points,
+              winRate: parseFloat(globalStats.win_rate),
+              form: globalStats.form || [],
+              leaguesWon: globalStats.leagues_won,
+              knockoutsWon: globalStats.knockouts_won,
+            } : {
+              played: 0,
+              wins: 0,
+              draws: 0,
+              losses: 0,
+              goalsFor: 0,
+              goalsAgainst: 0,
+              cleanSheets: 0,
+              points: 0,
+              winRate: 0,
+              form: [],
+              leaguesWon: 0,
+              knockoutsWon: 0,
+            },
+          };
 
-            const player = {
-              id: playerData.id,
-              name: playerData.name,
-              gamerHandle: playerData.gamer_handle,
-              email: playerData.email,
-              role: playerData.role as 'player' | 'admin' | 'super_admin',
-              status: playerData.status as 'active' | 'suspended' | 'banned',
-              joinedAt: playerData.joined_at,
-              stats: globalStats ? {
-                played: globalStats.played,
-                wins: globalStats.wins,
-                draws: globalStats.draws,
-                losses: globalStats.losses,
-                goalsFor: globalStats.goals_for,
-                goalsAgainst: globalStats.goals_against,
-                cleanSheets: globalStats.clean_sheets,
-                points: globalStats.points,
-                winRate: parseFloat(globalStats.win_rate),
-                form: globalStats.form || [],
-                leaguesWon: globalStats.leagues_won,
-                knockoutsWon: globalStats.knockouts_won,
-              } : {
-                played: 0,
-                wins: 0,
-                draws: 0,
-                losses: 0,
-                goalsFor: 0,
-                goalsAgainst: 0,
-                cleanSheets: 0,
-                points: 0,
-                winRate: 0,
-                form: [],
-                leaguesWon: 0,
-                knockoutsWon: 0,
-              },
-            };
-
-            setLoggedInUser(player);
-            router.replace('/(tabs)/home');
-          }
+          console.log('✅ Setting logged in user and redirecting to home');
+          setLoggedInUser(player);
+          router.replace('/(tabs)/home');
+        } else {
+          throw new Error('Failed to fetch updated player data');
         }
+      } else {
+        throw new Error('Profile update failed');
       }
     } catch (err: any) {
+      console.error('❌ Profile update error:', err);
       const msg = err?.message || 'Failed to update profile. Please try again.';
       Alert.alert('Error', msg);
     } finally {

@@ -43,11 +43,18 @@ export default function Index() {
         return;
       }
 
-      const { data: playerData } = await supabase
+      const { data: playerData, error: playerError } = await supabase
         .from('players')
         .select('id, name, gamer_handle')
         .eq('auth_user_id', user.id)
-        .single();
+        .maybeSingle();
+
+      if (playerError) {
+        console.error('Index: Error fetching player:', playerError);
+        hasRedirected.current = true;
+        router.replace('/auth');
+        return;
+      }
 
       if (!playerData) {
         console.log('Index: Player profile not found, redirecting to auth');
@@ -56,7 +63,7 @@ export default function Index() {
         return;
       }
 
-      if (!playerData.name) {
+      if (!playerData.name || !playerData.gamer_handle) {
         console.log('Index: Profile incomplete, redirecting to complete-profile');
         hasRedirected.current = true;
         router.replace({
