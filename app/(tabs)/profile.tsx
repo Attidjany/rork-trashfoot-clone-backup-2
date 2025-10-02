@@ -11,24 +11,46 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { User, Users, Plus, LogOut, Settings, ChevronRight, Search, Edit2, CheckCircle, XCircle, Loader } from 'lucide-react-native';
+import {
+  User,
+  Users,
+  Plus,
+  LogOut,
+  Settings,
+  ChevronRight,
+  Search,
+  Edit2,
+  CheckCircle,
+  XCircle,
+  Loader,
+} from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AchievementBadges } from '@/components/AchievementBadges';
 import { trpc } from '@/lib/trpc';
 
+// NEW: Supabase session + auth client
+import { useSession } from '@/hooks/use-session';
+import { supabase } from '@/lib/supabase';
+
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { 
-    currentUser, 
-    groups, 
-    activeGroupId, 
+
+  const {
+    currentUser,
+    groups,
+    activeGroupId,
     setActiveGroupId,
     createGroup,
     joinGroup,
-    logout,
+    logout, // we'll keep calling it for store cleanup, but Supabase is the source of truth
   } = useGameStore();
+
+  const { user, loading } = useSession(); // <- Supabase session
+  const signedIn = !!user;
+
+  // Local UI state
   const [createGroupModal, setCreateGroupModal] = useState(false);
   const [joinGroupModal, setJoinGroupModal] = useState(false);
   const [editProfileModal, setEditProfileModal] = useState(false);
@@ -40,23 +62,50 @@ export default function ProfileScreen() {
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null);
   const [handleSuggestions, setHandleSuggestions] = useState<string[]>([]);
   const [checkingHandle, setCheckingHandle] = useState(false);
-  
+
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
   const updateProfileMutation = trpc.auth.updateProfile.useMutation();
 
-  useEffect(() => {
-    if (editProfileModal && currentUser) {
-      setEditName(currentUser.name);
-      setEditGamerHandle(currentUser.gamerHandle);
-    }
-  }, [editProfileModal, currentUser]);
+  // Derive safe fallbacks when currentUser isn't ready yet
+  const fallbackName =
+    currentUser?.name ??
+    (user?.email ? user.email.split('@')[0] : 'Player');
+  const fallbackHandle = currentUser?.gamerHandle ?? fallbackName;
 
+  // Stats fallback to keep UI stable even if currentUser is missing
+  const stats = currentUser?.stats ?? {
+    played: 0,
+    wins: 0,
+    goalsFor: 0,
+    winRate: 0,
+    leaguesWon: 0,
+    knockoutsWon: 0,
+  };
+
+  // Joined date fallback
+  const joinedAt =
+    currentUser?.joinedAt ??
+    (user?.created_at ? user.created_at : new Date().toISOString());
+
+  // Populate edit fields when opening the modal
   useEffect(() => {
-    if (editProfileModal && editGamerHandle.length >= 3 && editGamerHandle !== currentUser?.gamerHandle) {
+    if (editProfileModal) {
+      setEditName(currentUser?.name ?? fallbackName);
+      setEditGamerHandle(currentUser?.gamerHandle ?? fallbackHandle);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editProfileModal]);
+
+  // Handle availability checks for gamer handle
+  useEffect(() => {
+    const baseline = currentUser?.gamerHandle ?? '';
+    if (editProfileModal && editGamerHandle.length >= 3 && editGamerHandle !== baseline) {
       const timeoutId = setTimeout(async () => {
         setCheckingHandle(true);
         try {
-          const result = await checkHandleMutation.mutateAsync({ gamerHandle: editGamerHandle.trim() });
+          const result = await checkHandleMutation.mutateAsync({
+            gamerHandle: editGamerHandle.trim(),
+          });
           setHandleAvailable(result.available);
           setHandleSuggestions(result.available ? [] : result.suggestions || []);
         } catch (error) {
@@ -67,7 +116,6 @@ export default function ProfileScreen() {
           setCheckingHandle(false);
         }
       }, 500);
-      
       return () => clearTimeout(timeoutId);
     } else {
       setHandleAvailable(null);
@@ -76,27 +124,39 @@ export default function ProfileScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editGamerHandle, editProfileModal]);
 
-  if (!currentUser) {
+  // If session still loading, show a simple loader rather than "not logged in"
+  if (loading) {
+    return (
+      <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
+        <User size={64} color="#64748B" />
+        <Text style={styles.emptyTitle}>Loading session…</Text>
+      </View>
+    );
+  }
+
+  // If not signed in via Supabase, send user to /auth (onboarding is obsolete)
+  if (!signedIn) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
         <User size={64} color="#64748B" />
         <Text style={styles.emptyTitle}>Not Logged In</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => router.replace('/onboarding')}
+          onPress={() => router.replace('/auth')}
         >
-          <Text style={styles.primaryButtonText}>Get Started</Text>
+          <Text style={styles.primaryButtonText}>Go to Login</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  // Actions
   const handleCreateGroup = () => {
     if (!groupName.trim()) {
       console.log('Error: Please enter a group name');
       return;
     }
-    
+    // This still uses your store action; we’ll migrate to Supabase later
     createGroup(groupName.trim(), groupDescription.trim());
     setCreateGroupModal(false);
     setGroupName('');
@@ -108,7 +168,7 @@ export default function ProfileScreen() {
       console.log('Error: Please enter a group code');
       return;
     }
-    
+    // This still uses your store action; we’ll migrate to Supabase later
     const result = joinGroup(groupCode.trim().toUpperCase());
     if (result) {
       setJoinGroupModal(false);
@@ -128,26 +188,55 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Please enter a gamer handle');
       return;
     }
-    if (editGamerHandle !== currentUser.gamerHandle && handleAvailable === false) {
+    if (currentUser && editGamerHandle !== currentUser.gamerHandle && handleAvailable === false) {
       Alert.alert('Error', 'Gamer handle is not available');
       return;
     }
-    
+
     try {
+      // Use store user id if present, else fall back to Supabase user id
+      const userId = currentUser?.id ?? user?.id;
+      if (!userId) throw new Error('Missing user id');
+
       await updateProfileMutation.mutateAsync({
-        userId: currentUser.id,
+        userId,
         name: editName.trim(),
         gamerHandle: editGamerHandle.trim(),
       });
-      
-      Alert.alert('Success', 'Profile updated successfully. Please log out and log back in to see the changes.');
+
+      Alert.alert(
+        'Success',
+        'Profile updated successfully. Please log out and log back in to see the changes.'
+      );
       setEditProfileModal(false);
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to update profile');
     }
   };
 
-  const userGroups = groups.filter(g => g.members.some(m => m.id === currentUser.id));
+  const handleLogout = async () => {
+    try {
+      // First sign out from Supabase (source of truth)
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      // Then clear your local store (if it exists)
+      try {
+        await logout();
+      } catch {
+        // ignore store errors
+      }
+
+      router.replace('/auth');
+    } catch (e: any) {
+      Alert.alert('Logout error', e?.message ?? String(e));
+    }
+  };
+
+  const userGroups =
+    currentUser
+      ? groups.filter((g) => g.members.some((m) => m.id === currentUser.id))
+      : [];
 
   return (
     <ScrollView style={[styles.container, { paddingTop: insets.top }]}>
@@ -161,9 +250,16 @@ export default function ProfileScreen() {
         <View style={styles.avatarContainer}>
           <User size={48} color="#fff" />
         </View>
+
         <View style={styles.profileNameContainer}>
-          <Text style={styles.userName}>@{currentUser.gamerHandle}</Text>
-          <Text style={styles.userFullName}>{currentUser.name}</Text>
+          <Text style={styles.userName}>@{currentUser?.gamerHandle ?? fallbackHandle}</Text>
+          <Text style={styles.userFullName}>{currentUser?.name ?? fallbackName}</Text>
+
+          {/* Show who is signed in (from Supabase) */}
+          <Text style={{ color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>
+            {user?.email ? `Signed in as ${user.email}` : 'Signed in'}
+          </Text>
+
           <TouchableOpacity
             style={styles.editProfileButton}
             onPress={() => setEditProfileModal(true)}
@@ -172,14 +268,15 @@ export default function ProfileScreen() {
             <Text style={styles.editProfileText}>Edit Profile</Text>
           </TouchableOpacity>
         </View>
-        <AchievementBadges 
-          leaguesWon={currentUser.stats.leaguesWon}
-          knockoutsWon={currentUser.stats.knockoutsWon}
+
+        <AchievementBadges
+          leaguesWon={stats.leaguesWon}
+          knockoutsWon={stats.knockoutsWon}
           size="large"
           style={styles.profileBadges}
         />
         <Text style={styles.joinDate}>
-          Member since {new Date(currentUser.joinedAt).toLocaleDateString()}
+          Member since {new Date(joinedAt).toLocaleDateString()}
         </Text>
       </LinearGradient>
 
@@ -188,31 +285,29 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Overall Statistics</Text>
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentUser.stats.played}</Text>
+            <Text style={styles.statValue}>{stats.played}</Text>
             <Text style={styles.statLabel}>Matches</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentUser.stats.wins}</Text>
+            <Text style={styles.statValue}>{stats.wins}</Text>
             <Text style={styles.statLabel}>Wins</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentUser.stats.goalsFor}</Text>
+            <Text style={styles.statValue}>{stats.goalsFor}</Text>
             <Text style={styles.statLabel}>Goals</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>
-              {currentUser.stats.played > 0 
-                ? Math.round(currentUser.stats.winRate) 
-                : 0}%
+              {stats.played > 0 ? Math.round(stats.winRate) : 0}%
             </Text>
             <Text style={styles.statLabel}>Win Rate</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentUser.stats.leaguesWon}</Text>
+            <Text style={styles.statValue}>{stats.leaguesWon}</Text>
             <Text style={styles.statLabel}>Leagues</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{currentUser.stats.knockoutsWon}</Text>
+            <Text style={styles.statValue}>{stats.knockoutsWon}</Text>
             <Text style={styles.statLabel}>Cups</Text>
           </View>
         </View>
@@ -247,14 +342,14 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {userGroups.length === 0 ? (
+        {currentUser && userGroups.length === 0 ? (
           <View style={styles.emptyGroups}>
             <Text style={styles.emptyGroupsText}>
               You haven&apos;t joined any groups yet
             </Text>
           </View>
-        ) : (
-          userGroups.map(group => (
+        ) : currentUser ? (
+          userGroups.map((group) => (
             <TouchableOpacity
               key={group.id}
               style={[
@@ -280,12 +375,19 @@ export default function ProfileScreen() {
               <ChevronRight size={20} color="#64748B" />
             </TouchableOpacity>
           ))
+        ) : (
+          // If currentUser is not hydrated yet, keep the UI friendly
+          <View style={styles.emptyGroups}>
+            <Text style={styles.emptyGroupsText}>
+              Your account is created. Complete your profile to see groups.
+            </Text>
+          </View>
         )}
       </View>
 
       {/* Settings */}
       <View style={styles.section}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.settingsButton}
           onPress={() => router.push('/settings')}
         >
@@ -293,15 +395,8 @@ export default function ProfileScreen() {
           <Text style={styles.settingsText}>Settings</Text>
           <ChevronRight size={20} color="#64748B" />
         </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.logoutButton}
-          onPress={async () => {
-            console.log('Logout requested');
-            await logout();
-            router.replace('/auth');
-          }}
-        >
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <LogOut size={20} color="#EF4444" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
@@ -317,7 +412,7 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Create New Group</Text>
-            
+
             <TextInput
               style={styles.input}
               value={groupName}
@@ -325,7 +420,7 @@ export default function ProfileScreen() {
               placeholder="Group Name"
               placeholderTextColor="#64748B"
             />
-            
+
             <TextInput
               style={[styles.input, styles.textArea]}
               value={groupDescription}
@@ -335,7 +430,7 @@ export default function ProfileScreen() {
               multiline
               numberOfLines={3}
             />
-            
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -347,10 +442,7 @@ export default function ProfileScreen() {
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={handleCreateGroup}
-              >
+              <TouchableOpacity style={styles.submitButton} onPress={handleCreateGroup}>
                 <Text style={styles.submitButtonText}>Create</Text>
               </TouchableOpacity>
             </View>
@@ -368,7 +460,7 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Join Group</Text>
-            
+
             <TextInput
               style={styles.input}
               value={groupCode}
@@ -378,13 +470,13 @@ export default function ProfileScreen() {
               autoCapitalize="characters"
               maxLength={8}
             />
-            
+
             <View style={styles.infoBox}>
               <Text style={styles.infoText}>
                 💡 Ask your group admin for the invite code. Example codes: TRASHLEGS, ROOKIES1
               </Text>
             </View>
-            
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -395,10 +487,7 @@ export default function ProfileScreen() {
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={handleJoinGroup}
-              >
+              <TouchableOpacity style={styles.submitButton} onPress={handleJoinGroup}>
                 <Text style={styles.submitButtonText}>Join</Text>
               </TouchableOpacity>
             </View>
@@ -416,7 +505,7 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Edit Profile</Text>
-            
+
             <TextInput
               style={styles.input}
               value={editName}
@@ -425,8 +514,13 @@ export default function ProfileScreen() {
               placeholderTextColor="#64748B"
               autoCapitalize="words"
             />
-            
-            <View style={[styles.handleInputContainer, handleAvailable === false && styles.inputError]}>
+
+            <View
+              style={[
+                styles.handleInputContainer,
+                handleAvailable === false && styles.inputError,
+              ]}
+            >
               <TextInput
                 style={styles.handleInput}
                 value={editGamerHandle}
@@ -437,14 +531,20 @@ export default function ProfileScreen() {
                 autoCorrect={false}
               />
               {checkingHandle && <Loader size={20} color="#64748B" />}
-              {!checkingHandle && editGamerHandle !== currentUser.gamerHandle && handleAvailable === true && <CheckCircle size={20} color="#10B981" />}
-              {!checkingHandle && editGamerHandle !== currentUser.gamerHandle && handleAvailable === false && <XCircle size={20} color="#EF4444" />}
+              {!checkingHandle &&
+                currentUser &&
+                editGamerHandle !== currentUser.gamerHandle &&
+                handleAvailable === true && <CheckCircle size={20} color="#10B981" />}
+              {!checkingHandle &&
+                currentUser &&
+                editGamerHandle !== currentUser.gamerHandle &&
+                handleAvailable === false && <XCircle size={20} color="#EF4444" />}
             </View>
-            
-            {handleAvailable === false && handleSuggestions.length > 0 && (
+
+            {currentUser && handleAvailable === false && handleSuggestions.length > 0 && (
               <View style={styles.suggestionsContainer}>
                 <Text style={styles.suggestionsTitle}>Suggestions:</Text>
-                <View style={styles.suggestionsRow}>
+                <View className="suggestionsRow" style={styles.suggestionsRow}>
                   {handleSuggestions.map((suggestion, index) => (
                     <TouchableOpacity
                       key={index}
@@ -457,7 +557,7 @@ export default function ProfileScreen() {
                 </View>
               </View>
             )}
-            
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -487,10 +587,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-  },
+  container: { flex: 1, backgroundColor: '#0F172A' },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -510,18 +607,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 24,
   },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  profileHeader: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  profileNameContainer: {
-    alignItems: 'center',
-  },
+  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' as const },
+  profileHeader: { padding: 24, alignItems: 'center' },
+  profileNameContainer: { alignItems: 'center' },
   editProfileButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -532,11 +620,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginTop: 8,
   },
-  editProfileText: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '500' as const,
-  },
+  editProfileText: { fontSize: 12, color: '#fff', fontWeight: '500' as const },
   avatarContainer: {
     width: 80,
     height: 80,
@@ -546,67 +630,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  userName: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: '#fff',
-    marginBottom: 4,
-  },
-  userFullName: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginBottom: 8,
-  },
-  joinDate: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  profileBadges: {
-    marginBottom: 8,
-  },
+  userName: { fontSize: 20, fontWeight: '700' as const, color: '#fff', marginBottom: 4 },
+  userFullName: { fontSize: 14, color: 'rgba(255, 255, 255, 0.7)', marginBottom: 8 },
+  joinDate: { fontSize: 14, color: 'rgba(255, 255, 255, 0.8)' },
+  profileBadges: { marginBottom: 8 },
   statsCard: {
     backgroundColor: '#1E293B',
     margin: 16,
     padding: 16,
     borderRadius: 12,
   },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 16,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: '#fff',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
+  statsGrid: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 16 },
+  statItem: { alignItems: 'center' },
+  statValue: { fontSize: 24, fontWeight: '700' as const, color: '#fff' },
+  statLabel: { fontSize: 12, color: '#64748B', marginTop: 4 },
+  section: { paddingHorizontal: 16, marginBottom: 24 },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: '#fff',
-  },
-  groupActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  sectionTitle: { fontSize: 18, fontWeight: '600' as const, color: '#fff' },
+  groupActions: { flexDirection: 'row', gap: 8 },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -616,21 +662,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
   },
-  actionText: {
-    fontSize: 12,
-    color: '#0EA5E9',
-    fontWeight: '500' as const,
-  },
+  actionText: { fontSize: 12, color: '#0EA5E9', fontWeight: '500' as const },
   emptyGroups: {
     backgroundColor: '#1E293B',
     padding: 24,
     borderRadius: 12,
     alignItems: 'center',
   },
-  emptyGroupsText: {
-    fontSize: 14,
-    color: '#64748B',
-  },
+  emptyGroupsText: { fontSize: 14, color: '#64748B' },
   groupCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -639,23 +678,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
-  activeGroupCard: {
-    borderWidth: 2,
-    borderColor: '#0EA5E9',
-  },
-  groupInfo: {
-    flex: 1,
-  },
-  groupName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#fff',
-    marginBottom: 4,
-  },
-  groupDescription: {
-    fontSize: 12,
-    color: '#64748B',
-  },
+  activeGroupCard: { borderWidth: 2, borderColor: '#0EA5E9' },
+  groupInfo: { flex: 1 },
+  groupName: { fontSize: 16, fontWeight: '600' as const, color: '#fff', marginBottom: 4 },
+  groupDescription: { fontSize: 12, color: '#64748B' },
   activeBadge: {
     backgroundColor: '#0EA5E9',
     paddingHorizontal: 8,
@@ -663,11 +689,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 8,
   },
-  activeText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
-    color: '#fff',
-  },
+  activeText: { fontSize: 10, fontWeight: '600' as const, color: '#fff' },
   settingsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -676,12 +698,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
-  settingsText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#fff',
-    marginLeft: 12,
-  },
+  settingsText: { flex: 1, fontSize: 16, color: '#fff', marginLeft: 12 },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -702,11 +719,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
-  modalContent: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 24,
-  },
+  modalContent: { backgroundColor: '#1E293B', borderRadius: 16, padding: 24 },
   modalTitle: {
     fontSize: 20,
     fontWeight: '600' as const,
@@ -722,14 +735,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 16,
   },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  textArea: { height: 80, textAlignVertical: 'top' },
+  modalActions: { flexDirection: 'row', gap: 12 },
   cancelButton: {
     flex: 1,
     paddingVertical: 12,
@@ -737,11 +744,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#334155',
     alignItems: 'center',
   },
-  cancelButtonText: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: '500' as const,
-  },
+  cancelButtonText: { fontSize: 16, color: '#fff', fontWeight: '500' as const },
   submitButton: {
     flex: 1,
     paddingVertical: 12,
@@ -749,11 +752,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0EA5E9',
     alignItems: 'center',
   },
-  submitButtonText: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: '600' as const,
-  },
+  submitButtonText: { fontSize: 16, color: '#fff', fontWeight: '600' as const },
   infoBox: {
     backgroundColor: 'rgba(14, 165, 233, 0.1)',
     padding: 12,
@@ -762,14 +761,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(14, 165, 233, 0.3)',
     marginBottom: 16,
   },
-  infoText: {
-    fontSize: 12,
-    color: '#0EA5E9',
-    lineHeight: 16,
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
+  infoText: { fontSize: 12, color: '#0EA5E9', lineHeight: 16 },
+  inputError: { borderColor: '#EF4444' },
   handleInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -780,25 +773,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155',
   },
-  handleInput: {
-    flex: 1,
-    paddingVertical: 16,
-    fontSize: 16,
-    color: '#fff',
-  },
-  suggestionsContainer: {
-    marginBottom: 16,
-  },
-  suggestionsTitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 8,
-  },
-  suggestionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
+  handleInput: { flex: 1, paddingVertical: 16, fontSize: 16, color: '#fff' },
+  suggestionsContainer: { marginBottom: 16 },
+  suggestionsTitle: { fontSize: 14, color: '#64748B', marginBottom: 8 },
+  suggestionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   suggestionChip: {
     backgroundColor: '#0F172A',
     paddingHorizontal: 12,
@@ -807,8 +785,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155',
   },
-  suggestionText: {
-    fontSize: 14,
-    color: '#0EA5E9',
-  },
+  suggestionText: { fontSize: 14, color: '#0EA5E9' },
 });
