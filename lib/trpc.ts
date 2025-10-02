@@ -2,6 +2,7 @@ import { createTRPCReact } from '@trpc/react-query';
 import { createTRPCClient, httpBatchLink } from '@trpc/client';
 import type { AppRouter } from '@/backend/trpc/app-router';
 import superjson from 'superjson';
+import { supabase } from './supabase';
 
 const getBaseUrl = () => {
   if (typeof window === 'undefined') {
@@ -68,6 +69,20 @@ export const trpcClient = createTRPCClient<AppRouter>({
     httpBatchLink({
       url: trpcUrl,
       transformer: superjson,
+      async headers() {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        if (token) {
+          console.log('✅ Adding auth token to tRPC request');
+          return {
+            authorization: `Bearer ${token}`,
+          };
+        }
+        
+        console.log('⚠️  No auth token available for tRPC request');
+        return {};
+      },
       fetch: async (url, options) => {
         try {
           console.log('tRPC fetch to:', url);

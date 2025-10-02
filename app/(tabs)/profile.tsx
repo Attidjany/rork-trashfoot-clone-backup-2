@@ -208,78 +208,24 @@ export default function ProfileScreen() {
     }
 
     try {
-      const userId = currentUser?.id ?? user?.id;
-      if (!userId) throw new Error('Missing user id');
-
       const result = await updateProfileMutation.mutateAsync({
-        userId,
         name: editName.trim(),
         gamerHandle: editGamerHandle.trim(),
       });
 
       if (result.success && result.player) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const { data: playerData, error: fetchError } = await supabase
-          .from('players')
-          .select('*')
-          .eq('id', userId)
-          .single();
-
-        if (fetchError) {
-          console.error('❌ Error fetching updated player:', fetchError);
-          throw new Error('Failed to fetch updated profile');
-        }
-
-        if (playerData) {
-          const { data: globalStats } = await supabase
-            .from('player_stats')
-            .select('*')
-            .eq('player_id', playerData.id)
-            .is('group_id', null)
-            .maybeSingle();
-
+        if (currentUser) {
           const updatedPlayer = {
-            id: playerData.id,
-            name: playerData.name,
-            gamerHandle: playerData.gamer_handle,
-            email: playerData.email,
-            role: playerData.role as 'player' | 'admin' | 'super_admin',
-            status: playerData.status as 'active' | 'suspended' | 'banned',
-            joinedAt: playerData.joined_at,
-            stats: globalStats ? {
-              played: globalStats.played,
-              wins: globalStats.wins,
-              draws: globalStats.draws,
-              losses: globalStats.losses,
-              goalsFor: globalStats.goals_for,
-              goalsAgainst: globalStats.goals_against,
-              cleanSheets: globalStats.clean_sheets,
-              points: globalStats.points,
-              winRate: parseFloat(globalStats.win_rate),
-              form: globalStats.form || [],
-              leaguesWon: globalStats.leagues_won,
-              knockoutsWon: globalStats.knockouts_won,
-            } : currentUser?.stats ?? {
-              played: 0,
-              wins: 0,
-              draws: 0,
-              losses: 0,
-              goalsFor: 0,
-              goalsAgainst: 0,
-              cleanSheets: 0,
-              points: 0,
-              winRate: 0,
-              form: [],
-              leaguesWon: 0,
-              knockoutsWon: 0,
-            },
+            ...currentUser,
+            name: result.player.name,
+            gamerHandle: result.player.gamerHandle,
+            email: result.player.email,
           };
-
           setLoggedInUser(updatedPlayer);
-          Alert.alert('Success', 'Profile updated successfully!');
-          setEditProfileModal(false);
         }
+        
+        Alert.alert('Success', 'Profile updated successfully!');
+        setEditProfileModal(false);
       }
     } catch (error: any) {
       console.error('❌ Profile update error:', error);
@@ -289,11 +235,19 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     try {
+      console.log('🔓 Logging out...');
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
+      if (error) {
+        console.error('❌ Logout error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Logged out successfully');
+      setLoggedInUser(null);
+      setActiveGroupId(null);
       router.replace('/auth');
     } catch (e: any) {
+      console.error('❌ Logout error:', e);
       Alert.alert('Logout error', e?.message ?? String(e));
     }
   };

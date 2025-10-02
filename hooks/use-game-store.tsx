@@ -532,7 +532,13 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     }
   }, [currentUser, activeGroup]);
 
-  const setLoggedInUser = useCallback((user: Player, gameData?: { currentUser: Player; groups: Group[]; activeGroupId: string; messages: ChatMessage[] }) => {
+  const setLoggedInUser = useCallback((user: Player | null, gameData?: { currentUser: Player; groups: Group[]; activeGroupId: string; messages: ChatMessage[] }) => {
+    if (!user) {
+      console.log('=== CLEARING USER ===');
+      setCurrentUser(null);
+      return;
+    }
+    
     console.log('=== SETTING LOGGED IN USER ===');
     console.log('User:', user.name, user.email, user.role);
     console.log('Game data provided:', !!gameData);
