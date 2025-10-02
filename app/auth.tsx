@@ -33,12 +33,12 @@ export default function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!sessionLoading && user && !hasRedirected.current && !isLoading) {
+    if (!sessionLoading && user && !hasRedirected.current) {
       console.log('Auth page: User already logged in, redirecting to index...');
       hasRedirected.current = true;
       router.replace('/');
     }
-  }, [user, sessionLoading, router, isLoading]);
+  }, [user, sessionLoading, router]);
 
   async function handleAuth() {
     if (!email.trim()) {
@@ -131,32 +131,7 @@ export default function AuthScreen() {
 
         if (data.session) {
           console.log('✅ Login successful, session created');
-          
-          const { data: playerData, error: playerError } = await supabase
-            .from('players')
-            .select('*')
-            .eq('auth_user_id', data.user.id)
-            .single();
-
-          if (playerError || !playerData) {
-            console.error('❌ Player not found:', playerError);
-            throw new Error('Player profile not found');
-          }
-
-          console.log('✅ Player found:', playerData.name, playerData.gamer_handle);
-
-          if (!playerData.name || !playerData.gamer_handle) {
-            console.log('⚠️ Profile incomplete, redirecting to complete-profile');
-            router.replace({
-              pathname: '/complete-profile',
-              params: { playerId: playerData.id },
-            });
-            return;
-          }
-
-          console.log('✅ Login successful, redirecting to index for routing...');
           hasRedirected.current = true;
-          router.replace('/');
         }
       }
     } catch (err: any) {
