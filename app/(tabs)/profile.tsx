@@ -29,7 +29,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AchievementBadges } from '@/components/AchievementBadges';
 import { trpc } from '@/lib/trpc';
 import { useSession } from '@/hooks/use-session';
-import { supabase } from '@/lib/supabase';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -39,10 +39,15 @@ export default function ProfileScreen() {
     currentUser,
     setLoggedInUser,
     setActiveGroupId,
+    activeGroupId,
+    logout: logoutFromStore,
   } = useGameStore();
 
   const { user, loading } = useSession();
   const signedIn = !!user;
+  
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
 
   const [createGroupModal, setCreateGroupModal] = useState(false);
   const [joinGroupModal, setJoinGroupModal] = useState(false);
@@ -60,37 +65,44 @@ export default function ProfileScreen() {
   const updateProfileMutation = trpc.auth.updateProfile.useMutation();
   const createGroupMutation = trpc.groups.create.useMutation();
   const joinGroupMutation = trpc.groups.join.useMutation();
-  const userGroupsQuery = trpc.groups.getUserGroups.useQuery(undefined, {
-    enabled: signedIn,
-  });
 
+  const currentPlayer = activeGroup?.members.find(m => m.email === user?.email);
+  
   const fallbackName =
+    currentPlayer?.name ??
     currentUser?.name ??
     (user?.email ? user.email.split('@')[0] : 'Player');
-  const fallbackHandle = currentUser?.gamerHandle ?? fallbackName;
+  const fallbackHandle = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? fallbackName;
 
-  const stats = currentUser?.stats ?? {
+  const stats = currentPlayer?.stats ?? currentUser?.stats ?? {
     played: 0,
     wins: 0,
+    draws: 0,
+    losses: 0,
     goalsFor: 0,
+    goalsAgainst: 0,
+    cleanSheets: 0,
+    points: 0,
     winRate: 0,
+    form: [],
     leaguesWon: 0,
     knockoutsWon: 0,
   };
 
   const joinedAt =
+    currentPlayer?.joinedAt ??
     currentUser?.joinedAt ??
     (user?.created_at ? user.created_at : new Date().toISOString());
 
   useEffect(() => {
     if (editProfileModal) {
-      setEditName(currentUser?.name ?? fallbackName);
-      setEditGamerHandle(currentUser?.gamerHandle ?? fallbackHandle);
+      setEditName(currentPlayer?.name ?? fallbackName);
+      setEditGamerHandle(currentPlayer?.gamerHandle ?? fallbackHandle);
     }
-  }, [editProfileModal, currentUser, fallbackName, fallbackHandle]);
+  }, [editProfileModal, currentPlayer, fallbackName, fallbackHandle]);
 
   useEffect(() => {
-    const baseline = currentUser?.gamerHandle ?? '';
+    const baseline = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '';
     if (editProfileModal && editGamerHandle.length >= 3 && editGamerHandle !== baseline) {
       const timeoutId = setTimeout(async () => {
         setCheckingHandle(true);
@@ -113,13 +125,13 @@ export default function ProfileScreen() {
       setHandleAvailable(null);
       setHandleSuggestions([]);
     }
-  }, [editGamerHandle, editProfileModal, currentUser, checkHandleMutation]);
+  }, [editGamerHandle, editProfileModal, currentPlayer, currentUser, checkHandleMutation]);
 
-  if (loading) {
+  if (loading || groupsLoading) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
         <User size={64} color="#64748B" />
-        <Text style={styles.emptyTitle}>Loading session…</Text>
+        <Text style={styles.emptyTitle}>Loading…</Text>
       </View>
     );
   }
@@ -159,8 +171,6 @@ export default function ProfileScreen() {
         setCreateGroupModal(false);
         setGroupName('');
         setGroupDescription('');
-        console.log('🔄 Refetching user groups...');
-        await userGroupsQuery.refetch();
         console.log('🔄 Setting active group ID:', result.group.id);
         setActiveGroupId(result.group.id);
       }
@@ -192,8 +202,6 @@ export default function ProfileScreen() {
         }
         setJoinGroupModal(false);
         setGroupCode('');
-        console.log('🔄 Refetching user groups...');
-        await userGroupsQuery.refetch();
         console.log('🔄 Setting active group ID:', result.group.id);
         setActiveGroupId(result.group.id);
       }
@@ -212,7 +220,8 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Please enter a gamer handle');
       return;
     }
-    if (currentUser && editGamerHandle !== currentUser.gamerHandle && handleAvailable === false) {
+    const baseline = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '';
+    if (editGamerHandle !== baseline && handleAvailable === false) {
       Alert.alert('Error', 'Gamer handle is not available');
       return;
     }
@@ -250,16 +259,8 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     try {
       console.log('🔓 Logging out...');
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('❌ Logout error:', error);
-        throw error;
-      }
-      
-      console.log('✅ Logged out from Supabase');
-      console.log('🔄 Clearing game store state...');
-      setLoggedInUser(null);
-      setActiveGroupId(null);
+      await logoutFromStore();
+      console.log('✅ Logged out successfully');
       console.log('🔄 Redirecting to auth...');
       router.replace('/auth');
     } catch (e: any) {
@@ -267,8 +268,6 @@ export default function ProfileScreen() {
       Alert.alert('Logout error', e?.message ?? String(e));
     }
   };
-
-  const userGroups = userGroupsQuery.data || [];
 
   return (
     <ScrollView style={[styles.container, { paddingTop: insets.top }]}>
@@ -283,8 +282,8 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.profileNameContainer}>
-          <Text style={styles.userName}>@{currentUser?.gamerHandle ?? fallbackHandle}</Text>
-          <Text style={styles.userFullName}>{currentUser?.name ?? fallbackName}</Text>
+          <Text style={styles.userName}>@{currentPlayer?.gamerHandle ?? fallbackHandle}</Text>
+          <Text style={styles.userFullName}>{currentPlayer?.name ?? fallbackName}</Text>
 
           <Text style={{ color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>
             {user?.email ? `Signed in as ${user.email}` : 'Signed in'}
@@ -370,18 +369,18 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {userGroupsQuery.isLoading ? (
+        {groupsLoading ? (
           <View style={styles.emptyGroups}>
             <Text style={styles.emptyGroupsText}>Loading groups...</Text>
           </View>
-        ) : userGroups.length === 0 ? (
+        ) : groups.length === 0 ? (
           <View style={styles.emptyGroups}>
             <Text style={styles.emptyGroupsText}>
               You haven&apos;t joined any groups yet
             </Text>
           </View>
         ) : (
-          userGroups.map((group: any) => (
+          groups.map((group) => (
             <TouchableOpacity
               key={group.id}
               style={styles.groupCard}
@@ -394,7 +393,7 @@ export default function ProfileScreen() {
                 <Text style={styles.groupDescription}>
                   {group.description || 'No description'}
                 </Text>
-                {group.isAdmin && (
+                {group.adminId === currentPlayer?.id && (
                   <Text style={styles.adminBadgeText}>Admin</Text>
                 )}
               </View>
@@ -559,16 +558,14 @@ export default function ProfileScreen() {
               />
               {checkingHandle && <Loader size={20} color="#64748B" />}
               {!checkingHandle &&
-                currentUser &&
-                editGamerHandle !== currentUser.gamerHandle &&
+                editGamerHandle !== (currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '') &&
                 handleAvailable === true && <CheckCircle size={20} color="#10B981" />}
               {!checkingHandle &&
-                currentUser &&
-                editGamerHandle !== currentUser.gamerHandle &&
+                editGamerHandle !== (currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '') &&
                 handleAvailable === false && <XCircle size={20} color="#EF4444" />}
             </View>
 
-            {currentUser && handleAvailable === false && handleSuggestions.length > 0 && (
+            {handleAvailable === false && handleSuggestions.length > 0 && (
               <View style={styles.suggestionsContainer}>
                 <Text style={styles.suggestionsTitle}>Suggestions:</Text>
                 <View style={styles.suggestionsRow}>
