@@ -19,16 +19,27 @@ export const updateProfileProcedure = publicProcedure
     const name = input.name.trim();
     const gamerHandle = input.gamerHandle.trim();
     
-    const { data: existingHandle } = await supabaseAdmin
+    if (!name || !gamerHandle) {
+      throw new Error('Name and gamer handle are required');
+    }
+    
+    const { data: existingHandle, error: checkError } = await supabaseAdmin
       .from('players')
       .select('id')
       .eq('gamer_handle', gamerHandle)
       .neq('id', input.userId)
-      .single();
+      .maybeSingle();
+    
+    if (checkError) {
+      console.error('Error checking handle:', checkError);
+    }
     
     if (existingHandle) {
+      console.log('Handle already taken by player:', existingHandle.id);
       throw new Error('This gamer handle is already taken. Please choose another one.');
     }
+    
+    console.log('Updating player with name:', name, 'and handle:', gamerHandle);
     
     const { data: player, error: playerError } = await supabaseAdmin
       .from('players')
@@ -40,13 +51,27 @@ export const updateProfileProcedure = publicProcedure
       .select()
       .single();
     
-    if (playerError || !player) {
+    if (playerError) {
       console.error('Player update error:', playerError);
-      throw new Error('Failed to update profile');
+      console.error('Error details:', JSON.stringify(playerError, null, 2));
+      throw new Error(`Failed to update profile: ${playerError.message}`);
+    }
+    
+    if (!player) {
+      console.error('No player returned after update');
+      throw new Error('Failed to update profile: No data returned');
     }
     
     console.log('=== PROFILE UPDATE SUCCESS ===');
-    console.log('Updated player:', player.name, '(' + player.gamer_handle + ')');
+    console.log('Updated player ID:', player.id);
+    console.log('Updated player name:', player.name);
+    console.log('Updated player handle:', player.gamer_handle);
+    console.log('Updated player email:', player.email);
+    
+    if (!player.name || !player.gamer_handle) {
+      console.error('WARNING: Player data missing after update!');
+      console.error('Player object:', JSON.stringify(player, null, 2));
+    }
     
     return {
       success: true,
