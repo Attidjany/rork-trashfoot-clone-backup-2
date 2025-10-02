@@ -5,6 +5,7 @@ import { loginProcedure } from "./routes/auth/login/route";
 import { oauthLoginProcedure } from "./routes/auth/oauth-login/route";
 import { checkGamerHandleProcedure } from "./routes/auth/check-handle/route";
 import { saveUserDataProcedure } from "./routes/auth/save-data/route";
+import { updateProfileProcedure } from "./routes/auth/update-profile/route";
 import { getPublicGroupsProcedure, requestJoinGroupProcedure, manageGroupMemberProcedure } from "./routes/groups/management/route";
 import { getAllAccountsProcedure, deleteAccountProcedure, getAccountStatsProcedure, bulkDeleteAccountsProcedure } from "./routes/admin/accounts/route";
 
@@ -18,6 +19,7 @@ export const appRouter = createTRPCRouter({
     oauthLogin: oauthLoginProcedure,
     checkGamerHandle: checkGamerHandleProcedure,
     saveData: saveUserDataProcedure,
+    updateProfile: updateProfileProcedure,
   }),
   groups: createTRPCRouter({
     getPublic: getPublicGroupsProcedure,

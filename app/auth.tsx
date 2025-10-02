@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,13 +14,9 @@ import { Stack, useRouter } from 'expo-router';
 import { 
   Mail, 
   Lock, 
-  User, 
   Eye, 
   EyeOff,
-  Gamepad2,
-  CheckCircle,
-  XCircle,
-  Loader
+  Gamepad2
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGameStore } from '@/hooks/use-game-store';
@@ -38,44 +34,15 @@ export default function AuthScreen() {
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [gamerHandle, setGamerHandle] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null);
-  const [handleSuggestions, setHandleSuggestions] = useState<string[]>([]);
-  const [checkingHandle, setCheckingHandle] = useState(false);
   
   const loginMutation = trpc.auth.login.useMutation();
   const registerMutation = trpc.auth.register.useMutation();
-  const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
   
 
 
-  useEffect(() => {
-    if (mode === 'signup' && gamerHandle.length >= 3) {
-      const timeoutId = setTimeout(async () => {
-        setCheckingHandle(true);
-        try {
-          const result = await checkHandleMutation.mutateAsync({ gamerHandle: gamerHandle.trim() });
-          setHandleAvailable(result.available);
-          setHandleSuggestions(result.available ? [] : result.suggestions || []);
-        } catch (error) {
-          console.error('Error checking handle:', error);
-          setHandleAvailable(null);
-          setHandleSuggestions([]);
-        } finally {
-          setCheckingHandle(false);
-        }
-      }, 500);
-      
-      return () => clearTimeout(timeoutId);
-    } else {
-      setHandleAvailable(null);
-      setHandleSuggestions([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gamerHandle, mode]);
+
 
   const handleAuth = async () => {
     console.log('=== handleAuth called ===');
@@ -93,18 +60,6 @@ export default function AuthScreen() {
     }
 
     if (mode === 'signup') {
-      if (!name.trim()) {
-        Alert.alert('Error', 'Please enter your name');
-        return;
-      }
-      if (!gamerHandle.trim()) {
-        Alert.alert('Error', 'Please enter a gamer handle');
-        return;
-      }
-      if (handleAvailable === false) {
-        Alert.alert('Error', 'Gamer handle is not available');
-        return;
-      }
       if (password.length < 6) {
         Alert.alert('Error', 'Password must be at least 6 characters');
         return;
@@ -118,18 +73,14 @@ export default function AuthScreen() {
       if (mode === 'signup') {
         console.log('Calling registerMutation.mutateAsync...');
         const result = await registerMutation.mutateAsync({
-          name: name.trim(),
-          gamerHandle: gamerHandle.trim(),
           email: email.trim(),
           password: password.trim(),
         });
         
-        console.log('Signup successful:', result.user.name);
+        console.log('Signup successful:', result.user.email);
         
         setEmail('');
         setPassword('');
-        setName('');
-        setGamerHandle('');
         
         Alert.alert(
           'Check Your Email',
@@ -243,54 +194,7 @@ export default function AuthScreen() {
               </TouchableOpacity>
             </View>
 
-            {mode === 'signup' && (
-              <>
-                <View style={styles.inputContainer}>
-                  <User size={20} color="#64748B" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Full Name"
-                    placeholderTextColor="#64748B"
-                    value={name}
-                    onChangeText={setName}
-                    autoCapitalize="words"
-                  />
-                </View>
-                
-                <View style={[styles.inputContainer, handleAvailable === false && styles.inputError]}>
-                  <Gamepad2 size={20} color="#64748B" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Gamer Handle (e.g., striker_alex)"
-                    placeholderTextColor="#64748B"
-                    value={gamerHandle}
-                    onChangeText={setGamerHandle}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  {checkingHandle && <Loader size={20} color="#64748B" />}
-                  {!checkingHandle && handleAvailable === true && <CheckCircle size={20} color="#10B981" />}
-                  {!checkingHandle && handleAvailable === false && <XCircle size={20} color="#EF4444" />}
-                </View>
-                
-                {handleAvailable === false && handleSuggestions.length > 0 && (
-                  <View style={styles.suggestionsContainer}>
-                    <Text style={styles.suggestionsTitle}>Suggestions:</Text>
-                    <View style={styles.suggestionsRow}>
-                      {handleSuggestions.map((suggestion, index) => (
-                        <TouchableOpacity
-                          key={index}
-                          style={styles.suggestionChip}
-                          onPress={() => setGamerHandle(suggestion)}
-                        >
-                          <Text style={styles.suggestionText}>{suggestion}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-              </>
-            )}
+
 
             <View style={styles.inputContainer}>
               <Mail size={20} color="#64748B" style={styles.inputIcon} />
@@ -343,7 +247,7 @@ export default function AuthScreen() {
 
             {mode === 'signup' && (
               <Text style={styles.infoText}>
-                You&apos;ll receive a confirmation email after signing up. Please verify your email before logging in.
+                You&apos;ll receive a confirmation email after signing up. Please verify your email before logging in. You can set your name and gamer handle in your profile after logging in.
               </Text>
             )}
           </View>

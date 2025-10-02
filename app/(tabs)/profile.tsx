@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,13 +7,15 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { User, Users, Plus, LogOut, Settings, ChevronRight, Search } from 'lucide-react-native';
+import { User, Users, Plus, LogOut, Settings, ChevronRight, Search, Edit2, CheckCircle, XCircle, Loader } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AchievementBadges } from '@/components/AchievementBadges';
+import { trpc } from '@/lib/trpc';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -29,9 +31,50 @@ export default function ProfileScreen() {
   } = useGameStore();
   const [createGroupModal, setCreateGroupModal] = useState(false);
   const [joinGroupModal, setJoinGroupModal] = useState(false);
+  const [editProfileModal, setEditProfileModal] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [groupCode, setGroupCode] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editGamerHandle, setEditGamerHandle] = useState('');
+  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null);
+  const [handleSuggestions, setHandleSuggestions] = useState<string[]>([]);
+  const [checkingHandle, setCheckingHandle] = useState(false);
+  
+  const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
+  const updateProfileMutation = trpc.auth.updateProfile.useMutation();
+
+  useEffect(() => {
+    if (editProfileModal && currentUser) {
+      setEditName(currentUser.name);
+      setEditGamerHandle(currentUser.gamerHandle);
+    }
+  }, [editProfileModal, currentUser]);
+
+  useEffect(() => {
+    if (editProfileModal && editGamerHandle.length >= 3 && editGamerHandle !== currentUser?.gamerHandle) {
+      const timeoutId = setTimeout(async () => {
+        setCheckingHandle(true);
+        try {
+          const result = await checkHandleMutation.mutateAsync({ gamerHandle: editGamerHandle.trim() });
+          setHandleAvailable(result.available);
+          setHandleSuggestions(result.available ? [] : result.suggestions || []);
+        } catch (error) {
+          console.error('Error checking handle:', error);
+          setHandleAvailable(null);
+          setHandleSuggestions([]);
+        } finally {
+          setCheckingHandle(false);
+        }
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      setHandleAvailable(null);
+      setHandleSuggestions([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editGamerHandle, editProfileModal]);
 
   if (!currentUser) {
     return (
@@ -76,6 +119,34 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleUpdateProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+    if (!editGamerHandle.trim()) {
+      Alert.alert('Error', 'Please enter a gamer handle');
+      return;
+    }
+    if (editGamerHandle !== currentUser.gamerHandle && handleAvailable === false) {
+      Alert.alert('Error', 'Gamer handle is not available');
+      return;
+    }
+    
+    try {
+      await updateProfileMutation.mutateAsync({
+        userId: currentUser.id,
+        name: editName.trim(),
+        gamerHandle: editGamerHandle.trim(),
+      });
+      
+      Alert.alert('Success', 'Profile updated successfully. Please log out and log back in to see the changes.');
+      setEditProfileModal(false);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to update profile');
+    }
+  };
+
   const userGroups = groups.filter(g => g.members.some(m => m.id === currentUser.id));
 
   return (
@@ -90,8 +161,17 @@ export default function ProfileScreen() {
         <View style={styles.avatarContainer}>
           <User size={48} color="#fff" />
         </View>
-        <Text style={styles.userName}>@{currentUser.gamerHandle}</Text>
-        <Text style={styles.userFullName}>{currentUser.name}</Text>
+        <View style={styles.profileNameContainer}>
+          <Text style={styles.userName}>@{currentUser.gamerHandle}</Text>
+          <Text style={styles.userFullName}>{currentUser.name}</Text>
+          <TouchableOpacity
+            style={styles.editProfileButton}
+            onPress={() => setEditProfileModal(true)}
+          >
+            <Edit2 size={14} color="#fff" />
+            <Text style={styles.editProfileText}>Edit Profile</Text>
+          </TouchableOpacity>
+        </View>
         <AchievementBadges 
           leaguesWon={currentUser.stats.leaguesWon}
           knockoutsWon={currentUser.stats.knockoutsWon}
@@ -325,6 +405,83 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        visible={editProfileModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditProfileModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
+            
+            <TextInput
+              style={styles.input}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Full Name"
+              placeholderTextColor="#64748B"
+              autoCapitalize="words"
+            />
+            
+            <View style={[styles.handleInputContainer, handleAvailable === false && styles.inputError]}>
+              <TextInput
+                style={styles.handleInput}
+                value={editGamerHandle}
+                onChangeText={setEditGamerHandle}
+                placeholder="Gamer Handle"
+                placeholderTextColor="#64748B"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {checkingHandle && <Loader size={20} color="#64748B" />}
+              {!checkingHandle && editGamerHandle !== currentUser.gamerHandle && handleAvailable === true && <CheckCircle size={20} color="#10B981" />}
+              {!checkingHandle && editGamerHandle !== currentUser.gamerHandle && handleAvailable === false && <XCircle size={20} color="#EF4444" />}
+            </View>
+            
+            {handleAvailable === false && handleSuggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                <Text style={styles.suggestionsTitle}>Suggestions:</Text>
+                <View style={styles.suggestionsRow}>
+                  {handleSuggestions.map((suggestion, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.suggestionChip}
+                      onPress={() => setEditGamerHandle(suggestion)}
+                    >
+                      <Text style={styles.suggestionText}>{suggestion}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setEditProfileModal(false);
+                  setEditName('');
+                  setEditGamerHandle('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handleUpdateProfile}
+                disabled={updateProfileMutation.isPending}
+              >
+                <Text style={styles.submitButtonText}>
+                  {updateProfileMutation.isPending ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -361,6 +518,24 @@ const styles = StyleSheet.create({
   profileHeader: {
     padding: 24,
     alignItems: 'center',
+  },
+  profileNameContainer: {
+    alignItems: 'center',
+  },
+  editProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  editProfileText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500' as const,
   },
   avatarContainer: {
     width: 80,
@@ -591,5 +766,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#0EA5E9',
     lineHeight: 16,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+  handleInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  handleInput: {
+    flex: 1,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: '#fff',
+  },
+  suggestionsContainer: {
+    marginBottom: 16,
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  suggestionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  suggestionChip: {
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#0EA5E9',
   },
 });

@@ -6,41 +6,21 @@ import { Player } from "../../../../../types/game";
 export const registerProcedure = publicProcedure
   .input(
     z.object({
-      name: z.string().min(2, "Name must be at least 2 characters"),
-      gamerHandle: z.string().min(3, "Gamer handle must be at least 3 characters").max(20, "Gamer handle must be less than 20 characters"),
       email: z.string().email("Invalid email address"),
       password: z.string().min(6, "Password must be at least 6 characters"),
     })
   )
   .mutation(async ({ input }) => {
     console.log('=== REGISTER ATTEMPT ===');
-    console.log('Name:', input.name);
-    console.log('Gamer Handle:', input.gamerHandle);
     console.log('Email:', input.email);
     
-    const name = input.name.trim();
-    const gamerHandle = input.gamerHandle.trim();
     const email = input.email.trim();
     const password = input.password.trim();
-    
-    const { data: existingHandle } = await supabaseAdmin
-      .from('players')
-      .select('id')
-      .eq('gamer_handle', gamerHandle)
-      .single();
-    
-    if (existingHandle) {
-      throw new Error('This gamer handle is already taken. Please choose another one.');
-    }
     
     const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          name,
-          gamer_handle: gamerHandle,
-        },
         emailRedirectTo: 'https://trashfoot.vercel.app/auth',
       },
     });
@@ -56,8 +36,8 @@ export const registerProcedure = publicProcedure
       .from('players')
       .insert({
         auth_user_id: authData.user.id,
-        name,
-        gamer_handle: gamerHandle,
+        name: null,
+        gamer_handle: null,
         email,
         phone: null,
         role: 'player',
@@ -89,8 +69,8 @@ export const registerProcedure = publicProcedure
     
     const user: Player = {
       id: player.id,
-      name: player.name,
-      gamerHandle: player.gamer_handle,
+      name: player.name || 'New Player',
+      gamerHandle: player.gamer_handle || `player_${player.id.slice(0, 8)}`,
       email: player.email || '',
       phone: player.phone || undefined,
       role: player.role as 'player' | 'admin' | 'super_admin',
