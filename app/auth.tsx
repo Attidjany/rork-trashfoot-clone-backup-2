@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { trpc } from '@/lib/trpc';
 import { useGameStore } from '@/hooks/use-game-store';
+import { useSession } from '@/hooks/use-session';
 
 type AuthMode = 'login' | 'signup';
 
@@ -25,6 +26,8 @@ export default function AuthScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { setLoggedInUser } = useGameStore();
+  const { user, loading: sessionLoading } = useSession();
+  const hasRedirected = useRef(false);
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -33,6 +36,14 @@ export default function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const loginMutation = trpc.auth.login.useMutation();
+
+  useEffect(() => {
+    if (!sessionLoading && user && !hasRedirected.current) {
+      console.log('Auth page: User already logged in, redirecting...');
+      hasRedirected.current = true;
+      router.replace('/');
+    }
+  }, [user, sessionLoading, router]);
 
   async function handleAuth() {
     if (!email.trim()) {
@@ -146,27 +157,44 @@ export default function AuthScreen() {
         if (error) throw error;
 
         if (data.session) {
-          const { data: playerData } = await supabase
+          console.log('✅ Login successful, session created');
+          
+          const { data: playerData, error: playerError } = await supabase
             .from('players')
             .select('*')
             .eq('auth_user_id', data.user.id)
             .single();
 
-          if (playerData && !playerData.name) {
+          if (playerError || !playerData) {
+            console.error('❌ Player not found:', playerError);
+            throw new Error('Player profile not found');
+          }
+
+          console.log('✅ Player found:', playerData.name, playerData.gamer_handle);
+
+          if (!playerData.name || !playerData.gamer_handle) {
+            console.log('⚠️ Profile incomplete, redirecting to complete-profile');
             router.replace({
               pathname: '/complete-profile',
               params: { playerId: playerData.id },
             });
-          } else if (playerData) {
-            const loginResult = await loginMutation.mutateAsync({
-              email: email.trim(),
-              password: password.trim(),
-            });
+            return;
+          }
 
-            if (loginResult.user && loginResult.gameData) {
-              setLoggedInUser(loginResult.user, loginResult.gameData);
-              router.replace('/(tabs)/home');
-            }
+          console.log('🔄 Fetching full game data...');
+          const loginResult = await loginMutation.mutateAsync({
+            email: email.trim(),
+            password: password.trim(),
+          });
+
+          if (loginResult.user && loginResult.gameData) {
+            console.log('✅ Game data loaded, setting user...');
+            setLoggedInUser(loginResult.user, loginResult.gameData);
+            console.log('✅ Redirecting to home...');
+            router.replace('/(tabs)/home');
+          } else {
+            console.error('❌ Login result missing data');
+            throw new Error('Failed to load game data');
           }
         }
       }
