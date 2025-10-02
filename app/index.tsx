@@ -1,4 +1,3 @@
-import 'react-native-url-polyfill/auto';
 import React, { useEffect, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
