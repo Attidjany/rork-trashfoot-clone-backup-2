@@ -71,14 +71,26 @@ export default function CompleteProfileScreen() {
       if (result.success && result.player) {
         console.log('✅ Profile updated successfully:', result.player);
         
-        const { data: playerData } = await supabase
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const { data: playerData, error: fetchError } = await supabase
           .from('players')
           .select('*')
           .eq('id', params.playerId)
           .single();
 
+        if (fetchError) {
+          console.error('❌ Error fetching updated player:', fetchError);
+          throw new Error('Failed to fetch updated profile');
+        }
+
         if (playerData) {
           console.log('✅ Player data fetched:', playerData.name, playerData.gamer_handle);
+          
+          if (!playerData.name || !playerData.gamer_handle) {
+            console.error('❌ Profile data not updated in database');
+            throw new Error('Profile update did not persist');
+          }
           
           const { data: globalStats } = await supabase
             .from('player_stats')

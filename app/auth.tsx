@@ -16,8 +16,6 @@ import { Mail, Lock, Eye, EyeOff, Gamepad2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
-import { trpc } from '@/lib/trpc';
-import { useGameStore } from '@/hooks/use-game-store';
 import { useSession } from '@/hooks/use-session';
 
 type AuthMode = 'login' | 'signup';
@@ -25,7 +23,6 @@ type AuthMode = 'login' | 'signup';
 export default function AuthScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setLoggedInUser } = useGameStore();
   const { user, loading: sessionLoading } = useSession();
   const hasRedirected = useRef(false);
 
@@ -35,15 +32,15 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const loginMutation = trpc.auth.login.useMutation();
-
   useEffect(() => {
-    if (!sessionLoading && user && !hasRedirected.current && !isLoading) {
-      console.log('Auth page: User already logged in, redirecting...');
+    if (!sessionLoading && user && !hasRedirected.current) {
+      console.log('Auth page: User already logged in, redirecting to index...');
       hasRedirected.current = true;
-      router.replace('/(tabs)/home');
+      setTimeout(() => {
+        router.replace('/');
+      }, 100);
     }
-  }, [user, sessionLoading, router, isLoading]);
+  }, [user, sessionLoading, router]);
 
   async function handleAuth() {
     if (!email.trim()) {
@@ -82,11 +79,14 @@ export default function AuthScreen() {
           }
 
           if (!playerData) {
+            const defaultHandle = email.trim().split('@')[0];
             const { data: newPlayer, error: createError } = await supabase
               .from('players')
               .insert({
                 auth_user_id: data.user.id,
                 email: email.trim(),
+                name: defaultHandle,
+                gamer_handle: defaultHandle,
                 role: 'player',
                 status: 'active',
               })
@@ -104,44 +104,11 @@ export default function AuthScreen() {
                 player_id: newPlayer.id,
                 group_id: null,
               });
-
-            router.replace({
-              pathname: '/complete-profile',
-              params: { playerId: newPlayer.id },
-            });
-          } else if (!playerData.name || !playerData.gamer_handle) {
-            router.replace({
-              pathname: '/complete-profile',
-              params: { playerId: playerData.id },
-            });
-          } else {
-            const player = {
-              id: playerData.id,
-              name: playerData.name,
-              gamerHandle: playerData.gamer_handle,
-              email: playerData.email,
-              role: playerData.role as 'player' | 'admin' | 'super_admin',
-              status: playerData.status as 'active' | 'suspended' | 'banned',
-              joinedAt: playerData.joined_at,
-              stats: {
-                played: 0,
-                wins: 0,
-                draws: 0,
-                losses: 0,
-                goalsFor: 0,
-                goalsAgainst: 0,
-                cleanSheets: 0,
-                points: 0,
-                winRate: 0,
-                form: [],
-                leaguesWon: 0,
-                knockoutsWon: 0,
-              },
-            };
-            setLoggedInUser(player);
-            hasRedirected.current = true;
-            router.replace('/(tabs)/home');
           }
+          
+          console.log('✅ Signup complete, redirecting to index for routing...');
+          hasRedirected.current = true;
+          router.replace('/');
         } else {
           Alert.alert(
             'Check your email',
@@ -157,47 +124,56 @@ export default function AuthScreen() {
         
         if (error) throw error;
 
-        if (data.session) {
-          console.log('✅ Login successful, session created');
+        if (data.session && data.user) {
+          console.log('✅ Login successful, checking player record...');
           
           const { data: playerData, error: playerError } = await supabase
             .from('players')
             .select('*')
             .eq('auth_user_id', data.user.id)
-            .single();
+            .maybeSingle();
 
-          if (playerError || !playerData) {
-            console.error('❌ Player not found:', playerError);
-            throw new Error('Player profile not found');
+          if (playerError) {
+            console.error('Error fetching player:', playerError);
           }
 
-          console.log('✅ Player found:', playerData.name, playerData.gamer_handle);
+          if (!playerData) {
+            console.log('⚠️ Player record not found, creating one...');
+            const defaultHandle = email.trim().split('@')[0];
+            const { data: newPlayer, error: createError } = await supabase
+              .from('players')
+              .insert({
+                auth_user_id: data.user.id,
+                email: email.trim(),
+                name: defaultHandle,
+                gamer_handle: defaultHandle,
+                role: 'player',
+                status: 'active',
+              })
+              .select()
+              .single();
 
-          if (!playerData.name || !playerData.gamer_handle) {
-            console.log('⚠️ Profile incomplete, redirecting to complete-profile');
-            router.replace({
-              pathname: '/complete-profile',
-              params: { playerId: playerData.id },
-            });
-            return;
-          }
+            if (createError || !newPlayer) {
+              console.error('Error creating player:', createError);
+              throw new Error('Failed to create player profile');
+            }
 
-          console.log('🔄 Fetching full game data...');
-          const loginResult = await loginMutation.mutateAsync({
-            email: email.trim(),
-            password: password.trim(),
-          });
-
-          if (loginResult.user && loginResult.gameData) {
-            console.log('✅ Game data loaded, setting user...');
-            setLoggedInUser(loginResult.user, loginResult.gameData);
-            console.log('✅ Redirecting to home...');
-            hasRedirected.current = true;
-            router.replace('/(tabs)/home');
+            await supabase
+              .from('player_stats')
+              .insert({
+                player_id: newPlayer.id,
+                group_id: null,
+              });
+            
+            console.log('✅ Player record created successfully');
           } else {
-            console.error('❌ Login result missing data');
-            throw new Error('Failed to load game data');
+            console.log('✅ Player record found:', playerData.name);
           }
+          
+          hasRedirected.current = true;
+          setTimeout(() => {
+            router.replace('/');
+          }, 100);
         }
       }
     } catch (err: any) {

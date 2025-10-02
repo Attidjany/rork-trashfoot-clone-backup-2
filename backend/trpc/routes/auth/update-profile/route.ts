@@ -1,60 +1,99 @@
 import { z } from "zod";
-import { publicProcedure } from "../../../create-context";
+import { protectedProcedure } from "../../../create-context";
 import { supabaseAdmin } from "../../../../lib/supabase-server";
 
-export const updateProfileProcedure = publicProcedure
+export const updateProfileProcedure = protectedProcedure
   .input(
     z.object({
-      userId: z.string(),
       name: z.string().min(2, "Name must be at least 2 characters"),
       gamerHandle: z.string().min(3, "Gamer handle must be at least 3 characters").max(20, "Gamer handle must be less than 20 characters"),
     })
   )
-  .mutation(async ({ input }) => {
+  .mutation(async ({ input, ctx }) => {
+    const userId = ctx.user?.id;
+    if (!userId) {
+      throw new Error('User not authenticated');
+    }
+    
     console.log('=== UPDATE PROFILE ATTEMPT ===');
-    console.log('User ID:', input.userId);
+    console.log('User ID:', userId);
     console.log('Name:', input.name);
     console.log('Gamer Handle:', input.gamerHandle);
     
     const name = input.name.trim();
     const gamerHandle = input.gamerHandle.trim();
     
-    const { data: existingHandle } = await supabaseAdmin
+    if (!name || !gamerHandle) {
+      throw new Error('Name and gamer handle are required');
+    }
+    
+    const { data: player } = await supabaseAdmin
+      .from('players')
+      .select('id')
+      .eq('auth_user_id', userId)
+      .single();
+    
+    if (!player) {
+      throw new Error('Player not found');
+    }
+    
+    const { data: existingHandle, error: checkError } = await supabaseAdmin
       .from('players')
       .select('id')
       .eq('gamer_handle', gamerHandle)
-      .neq('id', input.userId)
-      .single();
+      .neq('id', player.id)
+      .maybeSingle();
+    
+    if (checkError) {
+      console.error('Error checking handle:', checkError);
+    }
     
     if (existingHandle) {
+      console.log('Handle already taken by player:', existingHandle.id);
       throw new Error('This gamer handle is already taken. Please choose another one.');
     }
     
-    const { data: player, error: playerError } = await supabaseAdmin
+    console.log('Updating player with name:', name, 'and handle:', gamerHandle);
+    
+    const { data: updatedPlayer, error: playerError } = await supabaseAdmin
       .from('players')
       .update({
         name,
         gamer_handle: gamerHandle,
       })
-      .eq('id', input.userId)
+      .eq('id', player.id)
       .select()
       .single();
     
-    if (playerError || !player) {
+    if (playerError) {
       console.error('Player update error:', playerError);
-      throw new Error('Failed to update profile');
+      console.error('Error details:', JSON.stringify(playerError, null, 2));
+      throw new Error(`Failed to update profile: ${playerError.message}`);
+    }
+    
+    if (!updatedPlayer) {
+      console.error('No player returned after update');
+      throw new Error('Failed to update profile: No data returned');
     }
     
     console.log('=== PROFILE UPDATE SUCCESS ===');
-    console.log('Updated player:', player.name, '(' + player.gamer_handle + ')');
+    console.log('Updated player ID:', updatedPlayer.id);
+    console.log('Updated player name:', updatedPlayer.name);
+    console.log('Updated player handle:', updatedPlayer.gamer_handle);
+    console.log('Updated player email:', updatedPlayer.email);
+    
+    if (!updatedPlayer.name || !updatedPlayer.gamer_handle) {
+      console.error('WARNING: Player data missing after update!');
+      console.error('Player object:', JSON.stringify(updatedPlayer, null, 2));
+    }
     
     return {
       success: true,
       player: {
-        id: player.id,
-        name: player.name,
-        gamerHandle: player.gamer_handle,
-        email: player.email,
+        id: updatedPlayer.id,
+        name: updatedPlayer.name,
+        gamerHandle: updatedPlayer.gamer_handle,
+        email: updatedPlayer.email,
       },
     };
   });

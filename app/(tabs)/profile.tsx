@@ -28,8 +28,6 @@ import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AchievementBadges } from '@/components/AchievementBadges';
 import { trpc } from '@/lib/trpc';
-
-// NEW: Supabase session + auth client
 import { useSession } from '@/hooks/use-session';
 import { supabase } from '@/lib/supabase';
 
@@ -39,18 +37,13 @@ export default function ProfileScreen() {
 
   const {
     currentUser,
-    groups,
-    activeGroupId,
+    setLoggedInUser,
     setActiveGroupId,
-    createGroup,
-    joinGroup,
-    logout, // we'll keep calling it for store cleanup, but Supabase is the source of truth
   } = useGameStore();
 
-  const { user, loading } = useSession(); // <- Supabase session
+  const { user, loading } = useSession();
   const signedIn = !!user;
 
-  // Local UI state
   const [createGroupModal, setCreateGroupModal] = useState(false);
   const [joinGroupModal, setJoinGroupModal] = useState(false);
   const [editProfileModal, setEditProfileModal] = useState(false);
@@ -65,14 +58,17 @@ export default function ProfileScreen() {
 
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
   const updateProfileMutation = trpc.auth.updateProfile.useMutation();
+  const createGroupMutation = trpc.groups.create.useMutation();
+  const joinGroupMutation = trpc.groups.join.useMutation();
+  const userGroupsQuery = trpc.groups.getUserGroups.useQuery(undefined, {
+    enabled: signedIn,
+  });
 
-  // Derive safe fallbacks when currentUser isn't ready yet
   const fallbackName =
     currentUser?.name ??
     (user?.email ? user.email.split('@')[0] : 'Player');
   const fallbackHandle = currentUser?.gamerHandle ?? fallbackName;
 
-  // Stats fallback to keep UI stable even if currentUser is missing
   const stats = currentUser?.stats ?? {
     played: 0,
     wins: 0,
@@ -82,21 +78,17 @@ export default function ProfileScreen() {
     knockoutsWon: 0,
   };
 
-  // Joined date fallback
   const joinedAt =
     currentUser?.joinedAt ??
     (user?.created_at ? user.created_at : new Date().toISOString());
 
-  // Populate edit fields when opening the modal
   useEffect(() => {
     if (editProfileModal) {
       setEditName(currentUser?.name ?? fallbackName);
       setEditGamerHandle(currentUser?.gamerHandle ?? fallbackHandle);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editProfileModal]);
+  }, [editProfileModal, currentUser, fallbackName, fallbackHandle]);
 
-  // Handle availability checks for gamer handle
   useEffect(() => {
     const baseline = currentUser?.gamerHandle ?? '';
     if (editProfileModal && editGamerHandle.length >= 3 && editGamerHandle !== baseline) {
@@ -121,10 +113,8 @@ export default function ProfileScreen() {
       setHandleAvailable(null);
       setHandleSuggestions([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editGamerHandle, editProfileModal]);
+  }, [editGamerHandle, editProfileModal, currentUser, checkHandleMutation]);
 
-  // If session still loading, show a simple loader rather than "not logged in"
   if (loading) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
@@ -134,7 +124,6 @@ export default function ProfileScreen() {
     );
   }
 
-  // If not signed in via Supabase, send user to /auth (onboarding is obsolete)
   if (!signedIn) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
@@ -150,32 +139,67 @@ export default function ProfileScreen() {
     );
   }
 
-  // Actions
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (!groupName.trim()) {
-      console.log('Error: Please enter a group name');
+      Alert.alert('Error', 'Please enter a group name');
       return;
     }
-    // This still uses your store action; we’ll migrate to Supabase later
-    createGroup(groupName.trim(), groupDescription.trim());
-    setCreateGroupModal(false);
-    setGroupName('');
-    setGroupDescription('');
+
+    try {
+      console.log('🔄 Creating group:', groupName);
+      const result = await createGroupMutation.mutateAsync({
+        name: groupName.trim(),
+        description: groupDescription.trim(),
+      });
+
+      console.log('✅ Group created:', result);
+
+      if (result.success) {
+        Alert.alert('Success', `Group "${result.group.name}" created!\n\nInvite Code: ${result.group.inviteCode}`);
+        setCreateGroupModal(false);
+        setGroupName('');
+        setGroupDescription('');
+        console.log('🔄 Refetching user groups...');
+        await userGroupsQuery.refetch();
+        console.log('🔄 Setting active group ID:', result.group.id);
+        setActiveGroupId(result.group.id);
+      }
+    } catch (error: any) {
+      console.error('❌ Error creating group:', error);
+      Alert.alert('Error', error?.message || 'Failed to create group');
+    }
   };
 
-  const handleJoinGroup = () => {
+  const handleJoinGroup = async () => {
     if (!groupCode.trim()) {
-      console.log('Error: Please enter a group code');
+      Alert.alert('Error', 'Please enter a group code');
       return;
     }
-    // This still uses your store action; we’ll migrate to Supabase later
-    const result = joinGroup(groupCode.trim().toUpperCase());
-    if (result) {
-      setJoinGroupModal(false);
-      setGroupCode('');
-      console.log('Successfully joined group:', result.name);
-    } else {
-      console.log('Error: Invalid group code');
+
+    try {
+      console.log('🔄 Joining group with code:', groupCode.trim().toUpperCase());
+      const result = await joinGroupMutation.mutateAsync({
+        inviteCode: groupCode.trim().toUpperCase(),
+      });
+
+      console.log('✅ Join group result:', result);
+
+      if (result.success) {
+        if (result.alreadyMember) {
+          Alert.alert('Already a Member', `You are already a member of "${result.group.name}"`);
+        } else {
+          Alert.alert('Success', `Successfully joined "${result.group.name}"!`);
+        }
+        setJoinGroupModal(false);
+        setGroupCode('');
+        console.log('🔄 Refetching user groups...');
+        await userGroupsQuery.refetch();
+        console.log('🔄 Setting active group ID:', result.group.id);
+        setActiveGroupId(result.group.id);
+      }
+    } catch (error: any) {
+      console.error('❌ Error joining group:', error);
+      Alert.alert('Error', error?.message || 'Failed to join group');
     }
   };
 
@@ -194,53 +218,60 @@ export default function ProfileScreen() {
     }
 
     try {
-      // Use store user id if present, else fall back to Supabase user id
-      const userId = currentUser?.id ?? user?.id;
-      if (!userId) throw new Error('Missing user id');
-
-      await updateProfileMutation.mutateAsync({
-        userId,
+      console.log('🔄 Updating profile...');
+      const result = await updateProfileMutation.mutateAsync({
         name: editName.trim(),
         gamerHandle: editGamerHandle.trim(),
       });
 
-      Alert.alert(
-        'Success',
-        'Profile updated successfully. Please log out and log back in to see the changes.'
-      );
-      setEditProfileModal(false);
+      console.log('✅ Profile update result:', result);
+
+      if (result.success && result.player) {
+        if (currentUser) {
+          const updatedPlayer = {
+            ...currentUser,
+            name: result.player.name,
+            gamerHandle: result.player.gamerHandle,
+            email: result.player.email,
+          };
+          console.log('🔄 Updating game store with new player data:', updatedPlayer);
+          setLoggedInUser(updatedPlayer);
+        }
+        
+        Alert.alert('Success', 'Profile updated successfully!');
+        setEditProfileModal(false);
+      }
     } catch (error: any) {
+      console.error('❌ Profile update error:', error);
       Alert.alert('Error', error?.message || 'Failed to update profile');
     }
   };
 
   const handleLogout = async () => {
     try {
-      // First sign out from Supabase (source of truth)
+      console.log('🔓 Logging out...');
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
-      // Then clear your local store (if it exists)
-      try {
-        await logout();
-      } catch {
-        // ignore store errors
+      if (error) {
+        console.error('❌ Logout error:', error);
+        throw error;
       }
-
+      
+      console.log('✅ Logged out from Supabase');
+      console.log('🔄 Clearing game store state...');
+      setLoggedInUser(null);
+      setActiveGroupId(null);
+      console.log('🔄 Redirecting to auth...');
       router.replace('/auth');
     } catch (e: any) {
+      console.error('❌ Logout error:', e);
       Alert.alert('Logout error', e?.message ?? String(e));
     }
   };
 
-  const userGroups =
-    currentUser
-      ? groups.filter((g) => g.members.some((m) => m.id === currentUser.id))
-      : [];
+  const userGroups = userGroupsQuery.data || [];
 
   return (
     <ScrollView style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Profile Header */}
       <LinearGradient
         colors={['#0EA5E9', '#8B5CF6']}
         start={{ x: 0, y: 0 }}
@@ -255,7 +286,6 @@ export default function ProfileScreen() {
           <Text style={styles.userName}>@{currentUser?.gamerHandle ?? fallbackHandle}</Text>
           <Text style={styles.userFullName}>{currentUser?.name ?? fallbackName}</Text>
 
-          {/* Show who is signed in (from Supabase) */}
           <Text style={{ color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>
             {user?.email ? `Signed in as ${user.email}` : 'Signed in'}
           </Text>
@@ -280,7 +310,6 @@ export default function ProfileScreen() {
         </Text>
       </LinearGradient>
 
-      {/* Overall Stats */}
       <View style={styles.statsCard}>
         <Text style={styles.sectionTitle}>Overall Statistics</Text>
         <View style={styles.statsGrid}>
@@ -313,7 +342,6 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Groups Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>My Groups</Text>
@@ -342,50 +370,40 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {currentUser && userGroups.length === 0 ? (
+        {userGroupsQuery.isLoading ? (
+          <View style={styles.emptyGroups}>
+            <Text style={styles.emptyGroupsText}>Loading groups...</Text>
+          </View>
+        ) : userGroups.length === 0 ? (
           <View style={styles.emptyGroups}>
             <Text style={styles.emptyGroupsText}>
               You haven&apos;t joined any groups yet
             </Text>
           </View>
-        ) : currentUser ? (
-          userGroups.map((group) => (
+        ) : (
+          userGroups.map((group: any) => (
             <TouchableOpacity
               key={group.id}
-              style={[
-                styles.groupCard,
-                activeGroupId === group.id && styles.activeGroupCard,
-              ]}
+              style={styles.groupCard}
               onPress={() => {
-                setActiveGroupId(group.id);
                 router.push(`/group-details?groupId=${group.id}`);
               }}
             >
               <View style={styles.groupInfo}>
                 <Text style={styles.groupName}>{group.name}</Text>
                 <Text style={styles.groupDescription}>
-                  {group.members.length} members • {group.competitions.length} competitions
+                  {group.description || 'No description'}
                 </Text>
+                {group.isAdmin && (
+                  <Text style={styles.adminBadgeText}>Admin</Text>
+                )}
               </View>
-              {activeGroupId === group.id && (
-                <View style={styles.activeBadge}>
-                  <Text style={styles.activeText}>Active</Text>
-                </View>
-              )}
               <ChevronRight size={20} color="#64748B" />
             </TouchableOpacity>
           ))
-        ) : (
-          // If currentUser is not hydrated yet, keep the UI friendly
-          <View style={styles.emptyGroups}>
-            <Text style={styles.emptyGroupsText}>
-              Your account is created. Complete your profile to see groups.
-            </Text>
-          </View>
         )}
       </View>
 
-      {/* Settings */}
       <View style={styles.section}>
         <TouchableOpacity
           style={styles.settingsButton}
@@ -402,7 +420,6 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Create Group Modal */}
       <Modal
         visible={createGroupModal}
         transparent
@@ -442,15 +459,20 @@ export default function ProfileScreen() {
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.submitButton} onPress={handleCreateGroup}>
-                <Text style={styles.submitButtonText}>Create</Text>
+              <TouchableOpacity 
+                style={styles.submitButton} 
+                onPress={handleCreateGroup}
+                disabled={createGroupMutation.isPending}
+              >
+                <Text style={styles.submitButtonText}>
+                  {createGroupMutation.isPending ? 'Creating...' : 'Create'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Join Group Modal */}
       <Modal
         visible={joinGroupModal}
         transparent
@@ -487,15 +509,20 @@ export default function ProfileScreen() {
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.submitButton} onPress={handleJoinGroup}>
-                <Text style={styles.submitButtonText}>Join</Text>
+              <TouchableOpacity 
+                style={styles.submitButton} 
+                onPress={handleJoinGroup}
+                disabled={joinGroupMutation.isPending}
+              >
+                <Text style={styles.submitButtonText}>
+                  {joinGroupMutation.isPending ? 'Joining...' : 'Join'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Edit Profile Modal */}
       <Modal
         visible={editProfileModal}
         transparent
@@ -544,7 +571,7 @@ export default function ProfileScreen() {
             {currentUser && handleAvailable === false && handleSuggestions.length > 0 && (
               <View style={styles.suggestionsContainer}>
                 <Text style={styles.suggestionsTitle}>Suggestions:</Text>
-                <View className="suggestionsRow" style={styles.suggestionsRow}>
+                <View style={styles.suggestionsRow}>
                   {handleSuggestions.map((suggestion, index) => (
                     <TouchableOpacity
                       key={index}
@@ -678,18 +705,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
-  activeGroupCard: { borderWidth: 2, borderColor: '#0EA5E9' },
   groupInfo: { flex: 1 },
   groupName: { fontSize: 16, fontWeight: '600' as const, color: '#fff', marginBottom: 4 },
   groupDescription: { fontSize: 12, color: '#64748B' },
-  activeBadge: {
-    backgroundColor: '#0EA5E9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  activeText: { fontSize: 10, fontWeight: '600' as const, color: '#fff' },
+  adminBadgeText: { fontSize: 10, color: '#0EA5E9', marginTop: 4, fontWeight: '600' as const },
   settingsButton: {
     flexDirection: 'row',
     alignItems: 'center',
