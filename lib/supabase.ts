@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+/*import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -14,4 +14,23 @@ const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-export { supabaseClient };
+export { supabaseClient };*/
+// lib/supabase.ts
+import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+
+if (!url || !anon) {
+  // helps catch mis-wired env quickly
+  console.warn('Missing Supabase env. Check EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY');
+}
+
+export const supabase = createClient(url.replace(/\/$/, ''), anon, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false, // Expo Router/web safe default
+  },
+});
