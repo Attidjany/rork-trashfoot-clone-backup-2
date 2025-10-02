@@ -13,26 +13,32 @@ import { Trophy, Users, Calendar, Crown } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSession } from '@/hooks/use-session';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [isMounted, setIsMounted] = useState(false);
+  const { user, loading: sessionLoading } = useSession();
   const { 
     currentUser, 
-    activeGroup, 
-    isLoading,
+    activeGroupId,
   } = useGameStore();
+  
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
+  const isLoading = sessionLoading || groupsLoading;
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
-    if (isMounted && !isLoading && !currentUser) {
-      router.replace('/onboarding');
+    if (isMounted && !isLoading && !user) {
+      router.replace('/auth');
     }
-  }, [currentUser, isLoading, router, isMounted]);
+  }, [user, isLoading, router, isMounted]);
 
   if (!isMounted || isLoading) {
     return (

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { publicProcedure, protectedProcedure } from "../../../create-context";
-import { supabaseAdmin } from "../../lib/supabase-server";
+import { supabaseAdmin } from "../../../../lib/supabase-server";
 
 function generateInviteCode(): string {
   return Math.random().toString(36).substr(2, 8).toUpperCase();
@@ -32,8 +32,7 @@ export const getPublicGroupsProcedure = protectedProcedure
         invite_code,
         is_public,
         created_at,
-        admin_id,
-        group_members(count)
+        admin_id
       `)
       .eq('is_public', true);
 
@@ -51,15 +50,26 @@ export const getPublicGroupsProcedure = protectedProcedure
 
     const availableGroups = (groups || []).filter((g: any) => !userGroupIds.has(g.id));
 
-    return availableGroups.map((group: any) => ({
-      id: group.id,
-      name: group.name,
-      description: group.description || '',
-      inviteCode: group.invite_code,
-      isPublic: group.is_public,
-      memberCount: Array.isArray(group.group_members) ? group.group_members.length : 0,
-      createdAt: group.created_at,
-    }));
+    const groupsWithCounts = await Promise.all(
+      availableGroups.map(async (group: any) => {
+        const { count } = await supabaseAdmin
+          .from('group_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('group_id', group.id);
+        
+        return {
+          id: group.id,
+          name: group.name,
+          description: group.description || '',
+          inviteCode: group.invite_code,
+          isPublic: group.is_public,
+          memberCount: count || 0,
+          createdAt: group.created_at,
+        };
+      })
+    );
+
+    return groupsWithCounts;
   });
 
 export const createGroupProcedure = protectedProcedure
@@ -72,20 +82,34 @@ export const createGroupProcedure = protectedProcedure
   .mutation(async ({ input, ctx }) => {
     const userId = ctx.user?.id;
     if (!userId) {
+      console.error('❌ Create group: User not authenticated');
       throw new Error('User not authenticated');
     }
 
-    const { data: player } = await supabaseAdmin
+    console.log('🔄 Creating group for user:', userId);
+    console.log('🔄 Group name:', input.name);
+    console.log('🔄 Group description:', input.description);
+
+    const { data: player, error: playerError } = await supabaseAdmin
       .from('players')
-      .select('id')
+      .select('id, name, gamer_handle, email')
       .eq('auth_user_id', userId)
       .single();
 
-    if (!player) {
-      throw new Error('Player not found');
+    if (playerError) {
+      console.error('❌ Error fetching player:', playerError);
+      throw new Error(`Player lookup failed: ${playerError.message}`);
     }
 
+    if (!player) {
+      console.error('❌ Player not found for auth_user_id:', userId);
+      throw new Error('Player profile not found. Please complete your profile first.');
+    }
+
+    console.log('✅ Found player:', player.id, player.name, player.gamer_handle);
+
     const inviteCode = generateInviteCode();
+    console.log('🔄 Inserting group with invite code:', inviteCode);
 
     const { data: group, error: groupError } = await supabaseAdmin
       .from('groups')
@@ -99,10 +123,19 @@ export const createGroupProcedure = protectedProcedure
       .select()
       .single();
 
-    if (groupError || !group) {
-      console.error('Error creating group:', groupError);
-      throw new Error('Failed to create group');
+    if (groupError) {
+      console.error('❌ Error creating group:', groupError);
+      console.error('❌ Error details:', JSON.stringify(groupError, null, 2));
+      throw new Error(`Failed to create group: ${groupError.message}`);
     }
+
+    if (!group) {
+      console.error('❌ No group returned after insert');
+      throw new Error('Failed to create group: No data returned');
+    }
+
+    console.log('✅ Group created:', group.id, group.name);
+    console.log('🔄 Adding creator as group member...');
 
     const { error: memberError } = await supabaseAdmin
       .from('group_members')
@@ -113,9 +146,13 @@ export const createGroupProcedure = protectedProcedure
       });
 
     if (memberError) {
-      console.error('Error adding member:', memberError);
-      throw new Error('Failed to add member to group');
+      console.error('❌ Error adding member:', memberError);
+      console.error('❌ Error details:', JSON.stringify(memberError, null, 2));
+      throw new Error(`Failed to add member to group: ${memberError.message}`);
     }
+
+    console.log('✅ Member added successfully');
+    console.log('🔄 Creating player stats...');
 
     const { error: statsError } = await supabaseAdmin
       .from('player_stats')
@@ -125,8 +162,17 @@ export const createGroupProcedure = protectedProcedure
       });
 
     if (statsError) {
-      console.error('Error creating stats:', statsError);
+      console.error('⚠️ Error creating stats (non-fatal):', statsError);
+    } else {
+      console.log('✅ Player stats created');
     }
+
+    console.log('✅ Group creation complete!');
+    console.log('📋 Group details:', {
+      id: group.id,
+      name: group.name,
+      inviteCode: group.invite_code,
+    });
 
     return {
       success: true,

@@ -81,10 +81,12 @@ export const updateProfileProcedure = protectedProcedure
     console.log('Updated player name:', updatedPlayer.name);
     console.log('Updated player handle:', updatedPlayer.gamer_handle);
     console.log('Updated player email:', updatedPlayer.email);
+    console.log('Full updated player object:', JSON.stringify(updatedPlayer, null, 2));
     
     if (!updatedPlayer.name || !updatedPlayer.gamer_handle) {
       console.error('WARNING: Player data missing after update!');
       console.error('Player object:', JSON.stringify(updatedPlayer, null, 2));
+      throw new Error('Profile update succeeded but data is incomplete');
     }
     
     return {
