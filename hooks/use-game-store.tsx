@@ -1,8 +1,7 @@
-import createContextHook from '@nkzw/create-context-hook';
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import createContextHook from '@nkzw/create-context-hook'; 
+import { useState, useMemo, useCallback } from 'react';
 import { Player, Group, Competition, Match, ChatMessage, PlayerStats, KnockoutBracket, TournamentRound } from '@/types/game';
 import { supabase } from '@/lib/supabase';
-import { useRealtimeGroups } from './use-realtime-groups';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -69,92 +68,83 @@ function calculatePlayerStats(playerId: string, matches: Match[]): PlayerStats {
 
 export const [GameProvider, useGameStore] = createContextHook(() => {
   const [currentUser, setCurrentUser] = useState<Player | null>(null);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [authUserId, setAuthUserId] = useState<string | undefined>(undefined);
-  
-  const { groups, isLoading, error } = useRealtimeGroups(authUserId);
-
-  useEffect(() => {    
-    const getAuthUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setAuthUserId(user.id);
-      }
-    };
-    getAuthUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setAuthUserId(session.user.id);
-      } else {
-        setAuthUserId(undefined);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  const [isLoading, setIsLoading] = useState(false);
 
   const activeGroup = useMemo(() => {
     return groups.find(g => g.id === activeGroupId) || null;
   }, [groups, activeGroupId]);
 
+  // UPDATED: uses Supabase auth as source of truth; still updates local state
   const createGroup = useCallback(async (name: string, description: string) => {
-    if (!currentUser) return null;
-
     try {
+      // Source of truth: Supabase session (works even if store user isn't hydrated yet)
+      const { data: uData, error: uErr } = await supabase.auth.getUser();
+      if (uErr) throw uErr;
+      if (!uData?.user) {
+        console.error('createGroup: no Supabase user');
+        return null;
+      }
+      const adminId = uData.user.id;
+
       const inviteCode = generateInviteCode();
-      
+
+      // 1) Insert group
       const { data: group, error: groupError } = await supabase
         .from('groups')
         .insert({
           name,
           description,
-          admin_id: currentUser.id,
-          invite_code: inviteCode,
+          admin_id: adminId,          // IMPORTANT for RLS
+          invite_code: inviteCode,    // IMPORTANT: use invite_code
           is_public: false,
         })
         .select()
         .single();
-      
+
       if (groupError || !group) {
         console.error('Error creating group:', groupError);
         return null;
       }
-      
+
+      // 2) Insert membership (creator is admin)
       const { error: memberError } = await supabase
         .from('group_members')
         .insert({
           group_id: group.id,
-          player_id: currentUser.id,
+          player_id: adminId,
           is_admin: true,
+          role: 'admin',
         });
-      
-      if (memberError) {
+
+      // ignore duplicate membership if any
+      if (memberError && String((memberError as any).code) !== '23505') {
         console.error('Error adding member:', memberError);
         return null;
       }
-      
+
+      // 3) (Optional) Create player stats row
       const { error: statsError } = await supabase
         .from('player_stats')
         .insert({
-          player_id: currentUser.id,
+          player_id: adminId,
           group_id: group.id,
         });
-      
+
       if (statsError) {
         console.error('Error creating stats:', statsError);
       }
-      
+
+      // Build local Group object (members list uses currentUser if available)
       const newGroup: Group = {
         id: group.id,
         name: group.name,
         description: group.description || '',
         adminId: group.admin_id,
         adminIds: [group.admin_id],
-        members: [currentUser],
+        members: currentUser ? [currentUser] : [], // fallback: empty if not hydrated yet
         createdAt: group.created_at,
         competitions: [],
         inviteCode: group.invite_code,
@@ -162,6 +152,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
         pendingMembers: [],
       };
 
+      setGroups(prev => [...prev, newGroup]);
       setActiveGroupId(newGroup.id);
       return newGroup;
     } catch (error) {
@@ -170,66 +161,92 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     }
   }, [currentUser]);
 
+  // UPDATED: hits Supabase (lookup by invite_code + insert into group_members)
   const joinGroup = useCallback(async (inviteCode: string) => {
-    if (!currentUser) return null;
-
     try {
-      const { data: group, error: groupError } = await supabase
+      const code = (inviteCode || '').trim().toUpperCase();
+
+      const { data: uData, error: uErr } = await supabase.auth.getUser();
+      if (uErr) throw uErr;
+      if (!uData?.user) {
+        console.error('joinGroup: no Supabase user');
+        return null;
+      }
+      const playerId = uData.user.id;
+
+      // 1) Find the group by invite_code
+      const { data: group, error: gErr } = await supabase
         .from('groups')
-        .select('*')
-        .eq('invite_code', inviteCode.toUpperCase())
+        .select('id, name, description, admin_id, invite_code, is_public, created_at')
+        .eq('invite_code', code)
         .single();
 
-      if (groupError || !group) {
-        console.error('Error finding group:', groupError);
+      if (gErr || !group) {
+        console.error('Error finding group:', gErr);
         return null;
       }
 
-      const { data: existingMember } = await supabase
+      // 2) Insert membership
+      const { error: gmErr } = await supabase
         .from('group_members')
-        .select('id')
-        .eq('group_id', group.id)
-        .eq('player_id', currentUser.id)
-        .single();
+        .insert({ group_id: group.id, player_id: playerId, is_admin: false, role: 'member' });
 
-      if (existingMember) {
-        setActiveGroupId(group.id);
-        return group;
-      }
-
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .insert({
-          group_id: group.id,
-          player_id: currentUser.id,
-          is_admin: false,
-        });
-
-      if (memberError) {
-        console.error('Error joining group:', memberError);
+      if (gmErr && String((gmErr as any).code) !== '23505') {
+        console.error('Error joining group:', gmErr);
         return null;
       }
 
-      const { error: statsError } = await supabase
+      // 3) (Optional) Ensure stats row exists
+      const { error: statsErr } = await supabase
         .from('player_stats')
-        .insert({
-          player_id: currentUser.id,
-          group_id: group.id,
-        });
+        .insert({ player_id: playerId, group_id: group.id })
+        .select()
+        .single();
 
-      if (statsError) {
-        console.error('Error creating stats:', statsError);
+      // ignore unique violation if already exists
+      if (statsErr && String((statsErr as any).code) !== '23505') {
+        console.error('Error creating stats for member:', statsErr);
       }
 
-      setActiveGroupId(group.id);
-      return group;
+      // 4) Reflect in local store (add/merge)
+      const joined: Group = {
+        id: group.id,
+        name: group.name,
+        description: group.description || '',
+        adminId: group.admin_id,
+        adminIds: [group.admin_id],
+        members: currentUser ? [currentUser] : [], // we don't yet fetch other members here
+        createdAt: group.created_at,
+        competitions: [],
+        inviteCode: group.invite_code,
+        isPublic: group.is_public,
+        pendingMembers: [],
+      };
+
+      setGroups(prev => {
+        const exists = prev.some(g => g.id === joined.id);
+        if (exists) {
+          return prev.map(g => {
+            if (g.id !== joined.id) return g;
+            // add currentUser to members if not present
+            if (currentUser && !g.members.some(m => m.id === currentUser.id)) {
+              return { ...g, members: [...g.members, currentUser] };
+            }
+            return g;
+            });
+        }
+        return [...prev, joined];
+      });
+
+      setActiveGroupId(joined.id);
+      return joined;
     } catch (error) {
       console.error('Error joining group:', error);
       return null;
     }
-  }, [currentUser]);
+  }, [currentUser, groups]);
 
-  const createCompetition = useCallback(async (
+  const createCompetition = useCallback((
     name: string,
     type: Competition['type'],
     participantIds: string[],
@@ -243,66 +260,61 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   ) => {
     if (!activeGroupId) return null;
 
-    try {
-      const { data: competition, error } = await supabase
-        .from('competitions')
-        .insert({
-          group_id: activeGroupId,
-          name,
-          type,
-          status: 'upcoming',
-          start_date: new Date().toISOString(),
-          participants: participantIds,
-          league_format: options?.leagueFormat,
-          friendly_type: options?.friendlyType,
-          friendly_target: options?.friendlyTarget,
-          tournament_type: options?.tournamentType,
-          knockout_min_players: options?.knockoutMinPlayers,
-        })
-        .select()
-        .single();
+    const newCompetition: Competition = {
+      id: generateId(),
+      groupId: activeGroupId,
+      name,
+      type,
+      status: 'upcoming',
+      startDate: new Date().toISOString(),
+      participants: participantIds,
+      matches: [],
+      ...options,
+    };
 
-      if (error || !competition) {
-        console.error('Error creating competition:', error);
-        return null;
+    setGroups(prev => prev.map(group => {
+      if (group.id === activeGroupId) {
+        return {
+          ...group,
+          competitions: [...group.competitions, newCompetition],
+        };
       }
+      return group;
+    }));
 
-      return competition;
-    } catch (error) {
-      console.error('Error creating competition:', error);
-      return null;
-    }
+    return newCompetition;
   }, [activeGroupId]);
 
-  const createMatch = useCallback(async (
+  const createMatch = useCallback((
     competitionId: string,
     homePlayerId: string,
     awayPlayerId: string,
     scheduledTime: string
   ) => {
-    try {
-      const { data: match, error } = await supabase
-        .from('matches')
-        .insert({
-          competition_id: competitionId,
-          home_player_id: homePlayerId,
-          away_player_id: awayPlayerId,
-          status: 'scheduled',
-          scheduled_time: scheduledTime,
-        })
-        .select()
-        .single();
+    const newMatch: Match = {
+      id: generateId(),
+      competitionId,
+      homePlayerId,
+      awayPlayerId,
+      status: 'scheduled',
+      scheduledTime,
+    };
 
-      if (error || !match) {
-        console.error('Error creating match:', error);
-        return null;
-      }
+    setGroups(prev => prev.map(group => ({
+      ...group,
+      competitions: group.competitions.map(comp => {
+        if (comp.id === competitionId) {
+          return {
+            ...comp,
+            matches: [...comp.matches, newMatch],
+            status: 'active' as const,
+          };
+        }
+        return comp;
+      }),
+    })));
 
-      return match;
-    } catch (error) {
-      console.error('Error creating match:', error);
-      return null;
-    }
+    return newMatch;
   }, []);
 
   const sendMessage = useCallback(async (
@@ -350,73 +362,107 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     }
   }, [currentUser, activeGroupId]);
 
-  const updateMatchResult = useCallback(async (
+  const updateMatchResult = useCallback((
     matchId: string,
     homeScore: number,
     awayScore: number
   ) => {
-    try {
-      const { error } = await supabase
-        .from('matches')
-        .update({
-          home_score: homeScore,
-          away_score: awayScore,
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', matchId);
+    setGroups(prev => prev.map(group => ({
+      ...group,
+      members: group.members.map(member => ({
+        ...member,
+        stats: calculatePlayerStats(
+          member.id,
+          group.competitions.flatMap(c => c.matches)
+        ),
+      })),
+      competitions: group.competitions.map(comp => ({
+        ...comp,
+        matches: comp.matches.map(match => {
+          if (match.id === matchId) {
+            const updatedMatch = {
+              ...match,
+              homeScore,
+              awayScore,
+              status: 'completed' as const,
+              completedAt: new Date().toISOString(),
+            };
+            
+            const competition = comp;
+            if (competition.type === 'tournament' && competition.tournamentType === 'knockout' && homeScore === awayScore) {
+              const replayMatch: Match = {
+                id: generateId(),
+                competitionId: match.competitionId,
+                homePlayerId: match.homePlayerId,
+                awayPlayerId: match.awayPlayerId,
+                status: 'scheduled',
+                scheduledTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              };
+              comp.matches.push(replayMatch);
+            }
+            
+            return updatedMatch;
+          }
+          return match;
+        }),
+      })),
+    })));
 
-      if (error) {
-        console.error('Error updating match:', error);
-        return;
+    const match = groups
+      .flatMap(g => g.competitions)
+      .flatMap(c => c.matches)
+      .find(m => m.id === matchId);
+
+    if (match && currentUser) {
+      const homePlayer = activeGroup?.members.find(m => m.id === match.homePlayerId);
+      const awayPlayer = activeGroup?.members.find(m => m.id === match.awayPlayerId);
+      
+      sendMessage(
+        `Match Result: ${homePlayer?.name} ${homeScore} - ${awayScore} ${awayPlayer?.name}`,
+        'match_result',
+        { matchId }
+      );
+      
+      if (homeScore === awayScore) {
+        const competition = activeGroup?.competitions.find(c => c.id === match.competitionId);
+        if (competition?.type === 'tournament' && competition.tournamentType === 'knockout') {
+          sendMessage(
+            `⚽ Draw! A replay match has been automatically scheduled for tomorrow.`,
+            'text'
+          );
+        }
       }
-
-      const match = groups
-        .flatMap(g => g.competitions)
-        .flatMap(c => c.matches)
-        .find(m => m.id === matchId);
-
-      if (match && currentUser) {
-        const homePlayer = activeGroup?.members.find(m => m.id === match.homePlayerId);
-        const awayPlayer = activeGroup?.members.find(m => m.id === match.awayPlayerId);
-        
-        await sendMessage(
-          `Match Result: ${homePlayer?.name} ${homeScore} - ${awayScore} ${awayPlayer?.name}`,
-          'match_result',
-          { matchId }
-        );
-      }
-    } catch (error) {
-      console.error('Error updating match result:', error);
     }
   }, [groups, currentUser, activeGroup, sendMessage]);
 
-  const shareYoutubeLink = useCallback(async (matchId: string, youtubeLink: string) => {
-    try {
-      const { error } = await supabase
-        .from('matches')
-        .update({
-          youtube_link: youtubeLink,
-          status: 'live',
-        })
-        .eq('id', matchId);
+  const shareYoutubeLink = useCallback((matchId: string, youtubeLink: string) => {
+    setGroups(prev => prev.map(group => ({
+      ...group,
+      competitions: group.competitions.map(comp => ({
+        ...comp,
+        matches: comp.matches.map(match => {
+          if (match.id === matchId) {
+            return { ...match, youtubeLink, status: 'live' as const };
+          }
+          return match;
+        }),
+      })),
+    })));
 
-      if (error) {
-        console.error('Error updating match with YouTube link:', error);
-        return;
-      }
-
-      if (currentUser) {
-        await sendMessage(
-          `🔴 Live now: ${youtubeLink}`,
-          'youtube_link',
-          { matchId, youtubeLink }
-        );
-      }
-    } catch (error) {
-      console.error('Error sharing YouTube link:', error);
+    if (currentUser) {
+      const newMessage = {
+        id: generateId(),
+        groupId: activeGroupId!,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        message: `🔴 Live now: ${youtubeLink}`,
+        timestamp: new Date().toISOString(),
+        type: 'youtube_link' as const,
+        metadata: { matchId, youtubeLink },
+      };
+      setMessages(prev => [...prev, newMessage]);
     }
-  }, [currentUser, sendMessage]);
+  }, [currentUser, activeGroupId]);
 
   const getGroupMessages = useCallback((groupId: string) => {
     return messages.filter(m => m.groupId === groupId);
@@ -466,7 +512,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     };
   }, [activeGroup]);
 
-  const deleteMatch = useCallback(async (matchId: string) => {
+  const deleteMatch = useCallback((matchId: string) => {
     if (!currentUser || !activeGroup) return false;
     
     const match = activeGroup.competitions
@@ -482,25 +528,18 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     
     if (match.status === 'completed') return false;
     
-    try {
-      const { error } = await supabase
-        .from('matches')
-        .delete()
-        .eq('id', matchId);
-
-      if (error) {
-        console.error('Error deleting match:', error);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error deleting match:', error);
-      return false;
-    }
+    setGroups(prev => prev.map(group => ({
+      ...group,
+      competitions: group.competitions.map(comp => ({
+        ...comp,
+        matches: comp.matches.filter(m => m.id !== matchId),
+      })),
+    })));
+    
+    return true;
   }, [currentUser, activeGroup]);
 
-  const correctMatchScore = useCallback(async (
+  const correctMatchScore = useCallback((
     matchId: string,
     homeScore: number,
     awayScore: number
@@ -510,51 +549,75 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     const isAdmin = activeGroup.adminIds?.includes(currentUser.id) || activeGroup.adminId === currentUser.id;
     if (!isAdmin) return false;
     
-    try {
-      const { error } = await supabase
-        .from('matches')
-        .update({
-          home_score: homeScore,
-          away_score: awayScore,
-        })
-        .eq('id', matchId)
-        .eq('status', 'completed');
-
-      if (error) {
-        console.error('Error correcting match score:', error);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error correcting match score:', error);
-      return false;
-    }
+    setGroups(prev => prev.map(group => ({
+      ...group,
+      members: group.members.map(member => ({
+        ...member,
+        stats: calculatePlayerStats(
+          member.id,
+          group.competitions.flatMap(c => c.matches)
+        ),
+      })),
+      competitions: group.competitions.map(comp => ({
+        ...comp,
+        matches: comp.matches.map(match => {
+          if (match.id === matchId && match.status === 'completed') {
+            return {
+              ...match,
+              homeScore,
+              awayScore,
+            };
+          }
+          return match;
+        }),
+      })),
+    })));
+    
+    return true;
   }, [currentUser, activeGroup]);
 
-  const setLoggedInUser = useCallback((user: Player | null, gameData?: { currentUser: Player; groups: Group[]; activeGroupId: string; messages: ChatMessage[] }) => {
-    if (!user) {
-      console.log('=== CLEARING USER ===');
-      setCurrentUser(null);
-      return;
-    }
-    
+  const setLoggedInUser = useCallback((user: Player, gameData?: { currentUser: Player; groups: Group[]; activeGroupId: string; messages: ChatMessage[] }) => {
     console.log('=== SETTING LOGGED IN USER ===');
     console.log('User:', user.name, user.email, user.role);
     console.log('Game data provided:', !!gameData);
     
-    if (gameData && gameData.activeGroupId) {
+    if (gameData && gameData.groups && gameData.groups.length > 0) {
+      console.log('Loading game data with groups:', gameData.groups.length);
+      console.log('Active group ID:', gameData.activeGroupId);
+      console.log('Messages count:', gameData.messages?.length || 0);
+      
+      const currentUserFromData = gameData.currentUser || user;
+      
+      const updatedGroups = gameData.groups.map(group => ({
+        ...group,
+        adminIds: group.adminIds || (group.adminId ? [group.adminId] : []),
+        members: group.members.map(member => 
+          member.id === currentUserFromData.id ? currentUserFromData : member
+        ),
+      }));
+      
+      console.log('Setting groups:', updatedGroups.length);
+      setGroups(updatedGroups);
+      
       console.log('Setting active group ID:', gameData.activeGroupId);
-      setActiveGroupId(gameData.activeGroupId);
-    }
-    
-    if (gameData && gameData.messages) {
+      setActiveGroupId(gameData.activeGroupId || null);
+      
       console.log('Setting messages:', gameData.messages?.length || 0);
       setMessages(gameData.messages || []);
+      
+      console.log('Setting current user:', currentUserFromData.name);
+      setCurrentUser(currentUserFromData);
+      
+      console.log('Successfully loaded user data with', updatedGroups.length, 'groups');
+    } else {
+      console.log('No game data provided or empty groups, clearing existing data');
+      setGroups([]);
+      setActiveGroupId(null);
+      setMessages([]);
+      
+      console.log('Setting current user:', user);
+      setCurrentUser(user);
     }
-    
-    console.log('Setting current user:', user.name);
-    setCurrentUser(user);
     
     console.log('=== USER LOGIN COMPLETE ===');
   }, []);
@@ -565,9 +628,9 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       await supabase.auth.signOut();
       
       setCurrentUser(null);
+      setGroups([]);
       setActiveGroupId(null);
       setMessages([]);
-      setAuthUserId(undefined);
       
       console.log('Logout successful');
     } catch (error) {
@@ -585,17 +648,11 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   const generateNextRoundMatches = useCallback((competitionId: string, completedRound: number) => {
     console.log('Generating next round matches for competition:', competitionId, 'after round:', completedRound);
     
-    const group = groups.find(g => g.competitions.some(c => c.id === competitionId));
-    if (!group) {
-      console.log('Group not found for competition');
-      return;
-    }
-
-    const competition = group.competitions.find(c => c.id === competitionId);
-    if (!competition || !competition.bracket) {
-      console.log('Competition or bracket not found');
-      return;
-    }
+    setGroups(prev => prev.map(group => {
+      const competition = group.competitions.find(c => c.id === competitionId);
+      if (!competition || !competition.bracket) {
+        return group;
+      }
 
       const bracket = competition.bracket;
       const currentRoundMatches = bracket.rounds[completedRound]?.matches || [];
@@ -643,23 +700,58 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       
       console.log('Generated', nextRoundMatches.length, 'matches for round', nextRound);
       
-      console.log('Note: Tournament bracket progression needs to be implemented with Supabase');
-  }, [groups]);
+      const updatedBracket = {
+        ...bracket,
+        currentRound: nextRound,
+        rounds: bracket.rounds.map((round, index) => {
+          if (index === nextRound) {
+            return {
+              ...round,
+              matches: nextRoundMatches.map(m => m.id),
+              status: 'active' as const,
+              isGenerated: true,
+            };
+          }
+          if (index === completedRound) {
+            return {
+              ...round,
+              status: 'completed' as const,
+            };
+          }
+          return round;
+        }),
+        winners: {
+          ...bracket.winners,
+          [bracket.rounds[completedRound].id]: winners,
+        },
+      };
+      
+      return {
+        ...group,
+        competitions: group.competitions.map(comp => {
+          if (comp.id === competitionId) {
+            return {
+              ...comp,
+              matches: [...comp.matches, ...nextRoundMatches],
+              bracket: updatedBracket,
+              rounds: updatedBracket.rounds,
+            };
+          }
+          return comp;
+        }),
+      };
+    }));
+  }, []);
 
   const generateMatches = useCallback((competitionId: string) => {
     console.log('Generating matches for competition:', competitionId);
     
-    const group = groups.find(g => g.competitions.some(c => c.id === competitionId));
-    if (!group) {
-      console.log('Group not found for competition');
-      return;
-    }
-
-    const competition = group.competitions.find(c => c.id === competitionId);
-    if (!competition) {
-      console.log('Competition not found:', competitionId);
-      return;
-    }
+    setGroups(prev => prev.map(group => {
+      const competition = group.competitions.find(c => c.id === competitionId);
+      if (!competition) {
+        console.log('Competition not found:', competitionId);
+        return group;
+      }
 
       const matches: Match[] = [];
       const participants = competition.participants;
@@ -754,8 +846,22 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       }
 
       console.log('Generated matches:', matches.length);
-      console.log('Note: Match generation needs to be saved to Supabase');
-  }, [groups]);
+
+      return {
+        ...group,
+        competitions: group.competitions.map(comp => {
+          if (comp.id === competitionId) {
+            return {
+              ...comp,
+              matches,
+              status: 'active' as const,
+            };
+          }
+          return comp;
+        }),
+      };
+    }));
+  }, []);
 
   return {
     currentUser,
