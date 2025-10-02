@@ -58,19 +58,52 @@ export default function AuthScreen() {
         
         if (error) throw error;
 
-        if (data.session) {
-          const { data: playerData } = await supabase
+        if (data.session && data.user) {
+          const { data: playerData, error: playerError } = await supabase
             .from('players')
             .select('*')
-            .eq('auth_user_id', data.user!.id)
-            .single();
+            .eq('auth_user_id', data.user.id)
+            .maybeSingle();
 
-          if (playerData && !playerData.name) {
+          if (playerError) {
+            console.error('Error fetching player:', playerError);
+            throw new Error('Failed to fetch player profile');
+          }
+
+          if (!playerData) {
+            const { data: newPlayer, error: createError } = await supabase
+              .from('players')
+              .insert({
+                auth_user_id: data.user.id,
+                email: email.trim(),
+                role: 'player',
+                status: 'active',
+              })
+              .select()
+              .single();
+
+            if (createError || !newPlayer) {
+              console.error('Error creating player:', createError);
+              throw new Error('Failed to create player profile');
+            }
+
+            await supabase
+              .from('player_stats')
+              .insert({
+                player_id: newPlayer.id,
+                group_id: null,
+              });
+
+            router.replace({
+              pathname: '/complete-profile',
+              params: { playerId: newPlayer.id },
+            });
+          } else if (!playerData.name || !playerData.gamer_handle) {
             router.replace({
               pathname: '/complete-profile',
               params: { playerId: playerData.id },
             });
-          } else if (playerData) {
+          } else {
             const player = {
               id: playerData.id,
               name: playerData.name,

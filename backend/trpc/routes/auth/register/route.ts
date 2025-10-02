@@ -35,8 +35,6 @@ export const registerProcedure = publicProcedure
       .from('players')
       .insert({
         auth_user_id: authData.user.id,
-        name: null,
-        gamer_handle: null,
         email,
         role: 'player',
         status: 'active',
@@ -46,7 +44,11 @@ export const registerProcedure = publicProcedure
     
     if (playerError || !player) {
       console.error('Player creation error:', playerError);
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      try {
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      } catch (deleteError) {
+        console.error('Failed to delete auth user after player creation error:', deleteError);
+      }
       throw new Error('Failed to create player profile');
     }
     
