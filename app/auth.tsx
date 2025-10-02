@@ -41,7 +41,7 @@ export default function AuthScreen() {
     if (!sessionLoading && user && !hasRedirected.current && !isLoading) {
       console.log('Auth page: User already logged in, redirecting...');
       hasRedirected.current = true;
-      router.replace('/');
+      router.replace('/(tabs)/home');
     }
   }, [user, sessionLoading, router, isLoading]);
 
