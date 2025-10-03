@@ -72,6 +72,8 @@ export function useRealtimeGroups(userId: string | undefined) {
 
     try {
       setError(null);
+      console.log('🔄 Fetching groups data...');
+      const startTime = Date.now();
 
       const { data: player } = await supabase
         .from('players')
@@ -109,103 +111,152 @@ export function useRealtimeGroups(userId: string | undefined) {
         return;
       }
 
-      const groupsData: Group[] = await Promise.all(
-        (groupMembers || []).map(async (gm: any) => {
-          const groupId = gm.groups.id;
+      if (!groupMembers || groupMembers.length === 0) {
+        setGroups([]);
+        setIsLoading(false);
+        return;
+      }
 
-          const { data: members } = await supabase
-            .from('group_members')
-            .select(`
-              player_id,
-              is_admin,
-              players (
-                id,
-                name,
-                gamer_handle,
-                email,
-                role,
-                status,
-                joined_at
-              )
-            `)
-            .eq('group_id', groupId);
+      const groupIds = groupMembers.map((gm: any) => gm.groups.id);
 
-          const { data: competitions } = await supabase
-            .from('competitions')
-            .select('*')
-            .eq('group_id', groupId);
+      const [allMembersData, allCompetitionsData] = await Promise.all([
+        supabase
+          .from('group_members')
+          .select(`
+            group_id,
+            player_id,
+            is_admin,
+            players (
+              id,
+              name,
+              gamer_handle,
+              email,
+              role,
+              status,
+              joined_at
+            )
+          `)
+          .in('group_id', groupIds),
+        
+        supabase
+          .from('competitions')
+          .select('*')
+          .in('group_id', groupIds),
+      ]);
 
-          const competitionsWithMatches = await Promise.all(
-            (competitions || []).map(async (comp: any) => {
-              const { data: matches } = await supabase
-                .from('matches')
-                .select('*')
-                .eq('competition_id', comp.id);
+      const competitionIds = (allCompetitionsData.data || []).map((c: any) => c.id);
 
-              const { data: participants } = await supabase
-                .from('competition_participants')
-                .select('player_id')
-                .eq('competition_id', comp.id);
+      const [allMatchesData, allParticipantsData] = competitionIds.length > 0 ? await Promise.all([
+        supabase
+          .from('matches')
+          .select('*')
+          .in('competition_id', competitionIds),
+        
+        supabase
+          .from('competition_participants')
+          .select('competition_id, player_id')
+          .in('competition_id', competitionIds),
+      ]) : [{ data: [] }, { data: [] }];
 
-              return {
-                id: comp.id,
-                groupId: comp.group_id,
-                name: comp.name,
-                type: comp.type,
-                status: comp.status,
-                startDate: comp.start_date,
-                endDate: comp.end_date,
-                tournamentType: comp.tournament_type,
-                leagueFormat: comp.league_format,
-                friendlyType: comp.friendly_type,
-                friendlyTarget: comp.friendly_target,
-                knockoutMinPlayers: comp.knockout_min_players,
-                matches: (matches || []).map((m: any) => ({
-                  id: m.id,
-                  competitionId: m.competition_id,
-                  homePlayerId: m.home_player_id,
-                  awayPlayerId: m.away_player_id,
-                  homeScore: m.home_score,
-                  awayScore: m.away_score,
-                  status: m.status,
-                  scheduledTime: m.scheduled_time,
-                  completedAt: m.completed_at,
-                  youtubeLink: m.youtube_link,
-                })),
-                participants: (participants || []).map((p: any) => p.player_id),
-              };
-            })
-          );
+      const membersByGroup = new Map<string, any[]>();
+      (allMembersData.data || []).forEach((m: any) => {
+        if (!membersByGroup.has(m.group_id)) {
+          membersByGroup.set(m.group_id, []);
+        }
+        membersByGroup.get(m.group_id)!.push(m);
+      });
 
-          const allMatches = competitionsWithMatches.flatMap(c => c.matches);
-          
-          const membersList: Player[] = (members || []).map((m: any) => ({
-            id: m.players.id,
-            name: m.players.name,
-            gamerHandle: m.players.gamer_handle,
-            email: m.players.email,
-            role: m.players.role,
-            status: m.players.status,
-            joinedAt: m.players.joined_at,
-            stats: calculatePlayerStats(m.players.id, allMatches),
+      const competitionsByGroup = new Map<string, any[]>();
+      (allCompetitionsData.data || []).forEach((c: any) => {
+        if (!competitionsByGroup.has(c.group_id)) {
+          competitionsByGroup.set(c.group_id, []);
+        }
+        competitionsByGroup.get(c.group_id)!.push(c);
+      });
+
+      const matchesByCompetition = new Map<string, any[]>();
+      (allMatchesData.data || []).forEach((m: any) => {
+        if (!matchesByCompetition.has(m.competition_id)) {
+          matchesByCompetition.set(m.competition_id, []);
+        }
+        matchesByCompetition.get(m.competition_id)!.push(m);
+      });
+
+      const participantsByCompetition = new Map<string, string[]>();
+      (allParticipantsData.data || []).forEach((p: any) => {
+        if (!participantsByCompetition.has(p.competition_id)) {
+          participantsByCompetition.set(p.competition_id, []);
+        }
+        participantsByCompetition.get(p.competition_id)!.push(p.player_id);
+      });
+
+      const groupsData: Group[] = groupMembers.map((gm: any) => {
+        const groupId = gm.groups.id;
+        const members = membersByGroup.get(groupId) || [];
+        const competitions = competitionsByGroup.get(groupId) || [];
+
+        const competitionsWithMatches = competitions.map((comp: any) => {
+          const matches = (matchesByCompetition.get(comp.id) || []).map((m: any) => ({
+            id: m.id,
+            competitionId: m.competition_id,
+            homePlayerId: m.home_player_id,
+            awayPlayerId: m.away_player_id,
+            homeScore: m.home_score,
+            awayScore: m.away_score,
+            status: m.status,
+            scheduledTime: m.scheduled_time,
+            completedAt: m.completed_at,
+            youtubeLink: m.youtube_link,
           }));
 
           return {
-            id: gm.groups.id,
-            name: gm.groups.name,
-            description: gm.groups.description || '',
-            adminId: gm.groups.admin_id,
-            adminIds: [gm.groups.admin_id],
-            members: membersList,
-            createdAt: gm.groups.created_at,
-            competitions: competitionsWithMatches,
-            inviteCode: gm.groups.invite_code,
-            isPublic: gm.groups.is_public,
-            pendingMembers: [],
+            id: comp.id,
+            groupId: comp.group_id,
+            name: comp.name,
+            type: comp.type,
+            status: comp.status,
+            startDate: comp.start_date,
+            endDate: comp.end_date,
+            tournamentType: comp.tournament_type,
+            leagueFormat: comp.league_format,
+            friendlyType: comp.friendly_type,
+            friendlyTarget: comp.friendly_target,
+            knockoutMinPlayers: comp.knockout_min_players,
+            matches,
+            participants: participantsByCompetition.get(comp.id) || [],
           };
-        })
-      );
+        });
 
+        const allMatches = competitionsWithMatches.flatMap(c => c.matches);
+        
+        const membersList: Player[] = members.map((m: any) => ({
+          id: m.players.id,
+          name: m.players.name,
+          gamerHandle: m.players.gamer_handle,
+          email: m.players.email,
+          role: m.players.role,
+          status: m.players.status,
+          joinedAt: m.players.joined_at,
+          stats: calculatePlayerStats(m.players.id, allMatches),
+        }));
+
+        return {
+          id: gm.groups.id,
+          name: gm.groups.name,
+          description: gm.groups.description || '',
+          adminId: gm.groups.admin_id,
+          adminIds: [gm.groups.admin_id],
+          members: membersList,
+          createdAt: gm.groups.created_at,
+          competitions: competitionsWithMatches,
+          inviteCode: gm.groups.invite_code,
+          isPublic: gm.groups.is_public,
+          pendingMembers: [],
+        };
+      });
+
+      const endTime = Date.now();
+      console.log(`✅ Groups data fetched in ${endTime - startTime}ms (${groupsData.length} groups, ${competitionIds.length} competitions, ${allMatchesData.data?.length || 0} matches)`);
       setGroups(groupsData);
       setIsLoading(false);
     } catch (err: any) {
