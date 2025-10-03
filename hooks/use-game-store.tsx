@@ -625,18 +625,23 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
   }, []);
 
   const logout = useCallback(async () => {
-    console.log('Logging out user...');
+    console.log('🔓 Logging out user...');
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('❌ Supabase signOut error:', error);
+        throw error;
+      }
       
       setCurrentUser(null);
       setGroups([]);
       setActiveGroupId(null);
       setMessages([]);
       
-      console.log('Logout successful');
+      console.log('✅ Logout successful - state cleared');
     } catch (error) {
-      console.error('Error during logout:', error);
+      console.error('❌ Error during logout:', error);
+      throw error;
     }
   }, []);
 

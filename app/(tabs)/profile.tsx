@@ -257,16 +257,32 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = async () => {
-    try {
-      console.log('🔓 Logging out...');
-      await logoutFromStore();
-      console.log('✅ Logged out successfully');
-      console.log('🔄 Redirecting to auth...');
-      router.replace('/auth');
-    } catch (e: any) {
-      console.error('❌ Logout error:', e);
-      Alert.alert('Logout error', e?.message ?? String(e));
-    }
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🔓 Logging out...');
+              await logoutFromStore();
+              console.log('✅ Logged out successfully');
+              console.log('🔄 Redirecting to auth...');
+              router.replace('/auth');
+            } catch (e: any) {
+              console.error('❌ Logout error:', e);
+              Alert.alert('Logout error', e?.message ?? String(e));
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -380,26 +396,40 @@ export default function ProfileScreen() {
             </Text>
           </View>
         ) : (
-          groups.map((group) => (
-            <TouchableOpacity
-              key={group.id}
-              style={styles.groupCard}
-              onPress={() => {
-                router.push(`/group-details?groupId=${group.id}`);
-              }}
-            >
-              <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{group.name}</Text>
-                <Text style={styles.groupDescription}>
-                  {group.description || 'No description'}
-                </Text>
-                {group.adminId === currentPlayer?.id && (
-                  <Text style={styles.adminBadgeText}>Admin</Text>
-                )}
-              </View>
-              <ChevronRight size={20} color="#64748B" />
-            </TouchableOpacity>
-          ))
+          groups.map((group) => {
+            const isActive = group.id === activeGroupId;
+            return (
+              <TouchableOpacity
+                key={group.id}
+                style={[
+                  styles.groupCard,
+                  isActive && styles.activeGroupCard
+                ]}
+                onPress={() => {
+                  setActiveGroupId(group.id);
+                  router.push(`/group-details?groupId=${group.id}`);
+                }}
+              >
+                <View style={styles.groupInfo}>
+                  <View style={styles.groupNameRow}>
+                    <Text style={styles.groupName}>{group.name}</Text>
+                    {isActive && (
+                      <View style={styles.activeBadge}>
+                        <Text style={styles.activeBadgeText}>Active</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.groupDescription}>
+                    {group.description || 'No description'}
+                  </Text>
+                  {group.adminId === currentPlayer?.id && (
+                    <Text style={styles.adminBadgeText}>Admin</Text>
+                  )}
+                </View>
+                <ChevronRight size={20} color="#64748B" />
+              </TouchableOpacity>
+            );
+          })
         )}
       </View>
 
@@ -701,6 +731,28 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
+  },
+  activeGroupCard: {
+    borderWidth: 2,
+    borderColor: '#0EA5E9',
+    backgroundColor: '#1E3A52',
+  },
+  groupNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  activeBadge: {
+    backgroundColor: '#0EA5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  activeBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#fff',
   },
   groupInfo: { flex: 1 },
   groupName: { fontSize: 16, fontWeight: '600' as const, color: '#fff', marginBottom: 4 },

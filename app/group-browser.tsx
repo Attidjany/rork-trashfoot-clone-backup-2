@@ -19,15 +19,21 @@ import {
 } from 'lucide-react-native';
 import { useSession } from '@/hooks/use-session';
 import { trpc } from '@/lib/trpc';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
+import { useGameStore } from '@/hooks/use-game-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function GroupBrowserScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useSession();
+  const { user } = useSession();
+  const { setActiveGroupId } = useGameStore();
+  const { refetch: refetchUserGroups } = useRealtimeGroups(user?.id);
   
-  const publicGroupsQuery = trpc.groups.getPublic.useQuery();
+  const publicGroupsQuery = trpc.groups.getPublic.useQuery(undefined, {
+    enabled: !!user,
+  });
   const createGroupMutation = trpc.groups.create.useMutation();
   const joinGroupMutation = trpc.groups.join.useMutation();
   
@@ -38,7 +44,7 @@ export default function GroupBrowserScreen() {
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
 
-  if (!session) {
+  if (!user) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <Stack.Screen options={{ title: 'Browse Groups' }} />
@@ -79,8 +85,10 @@ export default function GroupBrowserScreen() {
       if (result.success) {
         setJoinModal(false);
         setSelectedGroup(null);
-        console.log('Successfully joined group:', result.group.name);
-        publicGroupsQuery.refetch();
+        console.log('✅ Successfully joined group:', result.group.name);
+        setActiveGroupId(result.group.id);
+        await refetchUserGroups();
+        await publicGroupsQuery.refetch();
         router.back();
       }
     } catch (error: any) {
@@ -105,9 +113,11 @@ export default function GroupBrowserScreen() {
         setCreateModal(false);
         setGroupName('');
         setGroupDescription('');
-        console.log('Group created:', result.group.name);
+        console.log('✅ Group created:', result.group.name);
         alert(`Group created!\n\nInvite Code: ${result.group.inviteCode}`);
-        publicGroupsQuery.refetch();
+        setActiveGroupId(result.group.id);
+        await refetchUserGroups();
+        await publicGroupsQuery.refetch();
         router.back();
       }
     } catch (error: any) {
