@@ -32,14 +32,15 @@ export const createCompetitionProcedure = protectedProcedure
       throw new Error('Player not found');
     }
 
-    const { data: group } = await supabaseAdmin
-      .from('groups')
-      .select('admin_id')
-      .eq('id', input.groupId)
+    const { data: membership } = await supabaseAdmin
+      .from('group_members')
+      .select('id')
+      .eq('group_id', input.groupId)
+      .eq('player_id', player.id)
       .single();
 
-    if (!group || group.admin_id !== player.id) {
-      throw new Error('Only group admins can create competitions');
+    if (!membership) {
+      throw new Error('You must be a member of this group to create competitions');
     }
 
     const { data: competition, error: compError } = await supabaseAdmin

@@ -345,22 +345,20 @@ export default function GroupDetailsScreen() {
       )}
 
       {/* Quick Actions */}
-      {isAdmin && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Admin Actions</Text>
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => setCreateCompModal(true)}
-          >
-            <Plus size={24} color="#0EA5E9" />
-            <View style={styles.actionText}>
-              <Text style={styles.actionTitle}>Create Competition</Text>
-              <Text style={styles.actionSubtitle}>Start a new tournament or league</Text>
-            </View>
-            <ChevronRight size={20} color="#64748B" />
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Actions</Text>
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => setCreateCompModal(true)}
+        >
+          <Plus size={24} color="#0EA5E9" />
+          <View style={styles.actionText}>
+            <Text style={styles.actionTitle}>Create Competition</Text>
+            <Text style={styles.actionSubtitle}>Start a new tournament or league</Text>
+          </View>
+          <ChevronRight size={20} color="#64748B" />
+        </TouchableOpacity>
+      </View>
 
       {/* Recent Activity */}
       <View style={styles.section}>

@@ -108,14 +108,15 @@ export default function CreateCompetitionScreen() {
         return;
       }
 
-      const { data: group } = await supabase
-        .from('groups')
-        .select('admin_id')
-        .eq('id', activeGroup.id)
+      const { data: membership } = await supabase
+        .from('group_members')
+        .select('id')
+        .eq('group_id', activeGroup.id)
+        .eq('player_id', player.id)
         .single();
 
-      if (!group || group.admin_id !== player.id) {
-        alert('Only group admins can create competitions');
+      if (!membership) {
+        alert('You must be a member of this group to create competitions');
         return;
       }
 
