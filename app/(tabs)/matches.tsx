@@ -24,18 +24,20 @@ export default function MatchesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, loading: sessionLoading } = useSession();
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups(user?.id);
   const { activeGroupId, shareYoutubeLink, deleteMatch, currentUser } = useGameStore();
   
   const utils = trpc.useUtils();
   const updateMatchMutation = trpc.matches.updateResult.useMutation({
     onSuccess: () => {
       utils.competitions.getGroupCompetitions.invalidate();
+      refetchGroups();
     },
   });
   const correctScoreMutation = trpc.matches.correctScore.useMutation({
     onSuccess: () => {
       utils.competitions.getGroupCompetitions.invalidate();
+      refetchGroups();
     },
   });
   
@@ -93,20 +95,20 @@ export default function MatchesScreen() {
       console.log('🎯 Submitting result:', { matchId: selectedMatch.id, homeScore: homeScoreNum, awayScore: awayScoreNum });
       
       if (selectedMatch.status === 'completed') {
-        const result = await correctScoreMutation.mutateAsync({
+        await correctScoreMutation.mutateAsync({
           matchId: selectedMatch.id,
           homeScore: homeScoreNum,
           awayScore: awayScoreNum,
         });
-        console.log('✅ Score corrected successfully:', result);
+        console.log('✅ Score corrected successfully');
         Alert.alert('Success', 'Score corrected successfully');
       } else {
-        const result = await updateMatchMutation.mutateAsync({
+        await updateMatchMutation.mutateAsync({
           matchId: selectedMatch.id,
           homeScore: homeScoreNum,
           awayScore: awayScoreNum,
         });
-        console.log('✅ Match result submitted successfully:', result);
+        console.log('✅ Match result submitted successfully');
         Alert.alert('Success', 'Match result submitted successfully');
       }
       
