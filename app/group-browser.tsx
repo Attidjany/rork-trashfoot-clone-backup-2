@@ -17,7 +17,7 @@ import {
   ChevronRight,
   X
 } from 'lucide-react-native';
-import { useGameStore } from '@/hooks/use-game-store';
+import { useSession } from '@/hooks/use-session';
 import { trpc } from '@/lib/trpc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,9 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 export default function GroupBrowserScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { 
-    currentUser,
-  } = useGameStore();
+  const { session } = useSession();
   
   const publicGroupsQuery = trpc.groups.getPublic.useQuery();
   const createGroupMutation = trpc.groups.create.useMutation();
@@ -40,7 +38,7 @@ export default function GroupBrowserScreen() {
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
 
-  if (!currentUser) {
+  if (!session) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <Stack.Screen options={{ title: 'Browse Groups' }} />
@@ -49,9 +47,9 @@ export default function GroupBrowserScreen() {
           <Text style={styles.emptyTitle}>Please login to browse groups</Text>
           <TouchableOpacity 
             style={styles.primaryButton}
-            onPress={() => router.replace('/onboarding')}
+            onPress={() => router.replace('/auth')}
           >
-            <Text style={styles.primaryButtonText}>Get Started</Text>
+            <Text style={styles.primaryButtonText}>Login</Text>
           </TouchableOpacity>
         </View>
       </View>

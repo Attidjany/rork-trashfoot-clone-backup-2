@@ -10,13 +10,19 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Trophy, Users, Calendar } from 'lucide-react-native';
-import { useGameStore } from '@/hooks/use-game-store';
+import { trpc } from '@/lib/trpc';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
+import { useSession } from '@/hooks/use-session';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function CreateCompetitionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { activeGroup, createCompetition, generateMatches } = useGameStore();
+  const { session } = useSession();
+  const { groups } = useRealtimeGroups(session?.user?.id);
+  const activeGroup = groups[0];
+  const createCompetitionMutation = trpc.competitions.create.useMutation();
+  
   const [name, setName] = useState('');
   const [type, setType] = useState<'league' | 'tournament' | 'friendly'>('league');
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
@@ -36,64 +42,63 @@ export default function CreateCompetitionScreen() {
     return null;
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
+    if (!activeGroup) {
+      alert('No active group selected');
+      return;
+    }
+
     if (!name.trim()) {
-      console.log('Error: Please enter a competition name');
+      alert('Please enter a competition name');
       return;
     }
     
-    // Validation based on competition type
     if (type === 'friendly') {
       if (selectedPlayers.length !== 2) {
-        console.log('Error: Friendly matches require exactly 2 players');
+        alert('Friendly matches require exactly 2 players');
         return;
       }
     } else if (type === 'tournament') {
       if (selectedPlayers.length < 4) {
-        console.log('Error: Tournaments require at least 4 players');
+        alert('Tournaments require at least 4 players');
         return;
       }
       if (selectedPlayers.length > 32) {
-        console.log('Error: Tournaments support maximum 32 players');
+        alert('Tournaments support maximum 32 players');
         return;
       }
-      // Check if it's a power of 2 for simple knockout
       const isPowerOf2 = (selectedPlayers.length & (selectedPlayers.length - 1)) === 0;
       if (!isPowerOf2) {
-        console.log('Error: Tournament requires a power of 2 number of players (4, 8, 16, 32)');
+        alert('Tournament requires a power of 2 number of players (4, 8, 16, 32)');
         return;
       }
     } else {
       if (selectedPlayers.length < 2) {
-        console.log('Error: Please select at least 2 players');
+        alert('Please select at least 2 players');
         return;
       }
     }
 
-    const options: any = {};
-    
-    if (type === 'league') {
-      options.leagueFormat = leagueFormat;
-    } else if (type === 'friendly') {
-      options.friendlyType = friendlyType;
-      options.friendlyTarget = parseInt(friendlyTarget) || 3;
-    } else if (type === 'tournament') {
-      options.tournamentType = tournamentType;
-      options.knockoutMinPlayers = 4;
-    }
+    try {
+      const result = await createCompetitionMutation.mutateAsync({
+        groupId: activeGroup.id,
+        name: name.trim(),
+        type,
+        participantIds: selectedPlayers,
+        leagueFormat: type === 'league' ? leagueFormat : undefined,
+        friendlyType: type === 'friendly' ? friendlyType : undefined,
+        friendlyTarget: type === 'friendly' ? parseInt(friendlyTarget) || 3 : undefined,
+        tournamentType: type === 'tournament' ? tournamentType : undefined,
+        knockoutMinPlayers: type === 'tournament' ? 4 : undefined,
+      });
 
-    console.log('Creating competition with:', { name: name.trim(), type, selectedPlayers, options });
-    
-    const competition = createCompetition(name.trim(), type, selectedPlayers, options);
-    
-    if (competition) {
-      console.log('Competition created successfully:', competition);
-      // Auto-generate matches based on competition type
-      generateMatches(competition.id);
-      console.log(`Generated matches for ${type} competition:`, competition.name);
-      router.back();
-    } else {
-      console.log('Failed to create competition');
+      if (result.success) {
+        console.log('Competition created successfully:', result.competition);
+        router.back();
+      }
+    } catch (error: any) {
+      console.error('Error creating competition:', error);
+      alert(error?.message || 'Failed to create competition');
     }
   };
 
