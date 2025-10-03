@@ -42,6 +42,7 @@ export default function ProfileScreen() {
     setActiveGroupId,
     activeGroupId,
     logout: logoutFromStore,
+    isHydrated,
   } = useGameStore();
 
   const { user, loading } = useSession();
@@ -49,6 +50,13 @@ export default function ProfileScreen() {
   
   const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
+
+  useEffect(() => {
+    if (!groupsLoading && groups.length > 0 && !activeGroupId && isHydrated) {
+      console.log('🎯 Auto-selecting group in profile:', groups[0].name);
+      setActiveGroupId(groups[0].id);
+    }
+  }, [groups, groupsLoading, activeGroupId, setActiveGroupId, isHydrated]);
 
   const [createGroupModal, setCreateGroupModal] = useState(false);
   const [joinGroupModal, setJoinGroupModal] = useState(false);
@@ -127,7 +135,7 @@ export default function ProfileScreen() {
     }
   }, [editGamerHandle, editProfileModal, currentPlayer, currentUser, checkHandleMutation]);
 
-  if (loading || groupsLoading) {
+  if (loading || groupsLoading || !isHydrated) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
         <User size={64} color="#64748B" />
@@ -461,35 +469,46 @@ export default function ProfileScreen() {
           groups.map((group) => {
             const isActive = group.id === activeGroupId;
             return (
-              <TouchableOpacity
-                key={group.id}
-                style={[
-                  styles.groupCard,
-                  isActive && styles.activeGroupCard
-                ]}
-                onPress={() => {
-                  setActiveGroupId(group.id);
-                  router.push(`/group-details?groupId=${group.id}`);
-                }}
-              >
-                <View style={styles.groupInfo}>
-                  <View style={styles.groupNameRow}>
-                    <Text style={styles.groupName}>{group.name}</Text>
-                    {isActive && (
-                      <View style={styles.activeBadge}>
-                        <Text style={styles.activeBadgeText}>Active</Text>
-                      </View>
+              <View key={group.id} style={styles.groupCardWrapper}>
+                <TouchableOpacity
+                  style={[
+                    styles.groupCard,
+                    isActive && styles.activeGroupCard
+                  ]}
+                  onPress={() => {
+                    router.push(`/group-details?groupId=${group.id}`);
+                  }}
+                >
+                  <View style={styles.groupInfo}>
+                    <View style={styles.groupNameRow}>
+                      <Text style={styles.groupName}>{group.name}</Text>
+                      {isActive && (
+                        <View style={styles.activeBadge}>
+                          <Text style={styles.activeBadgeText}>Active</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.groupDescription}>
+                      {group.description || 'No description'}
+                    </Text>
+                    {group.adminId === currentPlayer?.id && (
+                      <Text style={styles.adminBadgeText}>Admin</Text>
                     )}
                   </View>
-                  <Text style={styles.groupDescription}>
-                    {group.description || 'No description'}
-                  </Text>
-                  {group.adminId === currentPlayer?.id && (
-                    <Text style={styles.adminBadgeText}>Admin</Text>
-                  )}
-                </View>
-                <ChevronRight size={20} color="#64748B" />
-              </TouchableOpacity>
+                  <ChevronRight size={20} color="#64748B" />
+                </TouchableOpacity>
+                {!isActive && (
+                  <TouchableOpacity
+                    style={styles.setActiveButton}
+                    onPress={() => {
+                      console.log('🔄 Switching active group to:', group.name);
+                      setActiveGroupId(group.id);
+                    }}
+                  >
+                    <Text style={styles.setActiveButtonText}>Set as Active</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             );
           })
         )}
@@ -789,7 +808,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B',
     padding: 16,
     borderRadius: 12,
-    marginBottom: 8,
   },
   activeGroupCard: {
     borderWidth: 2,
@@ -913,4 +931,20 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   suggestionText: { fontSize: 14, color: '#0EA5E9' },
+  groupCardWrapper: {
+    marginBottom: 8,
+  },
+  setActiveButton: {
+    backgroundColor: '#0EA5E9',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  setActiveButtonText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600' as const,
+  },
 });

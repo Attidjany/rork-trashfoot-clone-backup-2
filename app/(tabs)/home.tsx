@@ -24,11 +24,20 @@ export default function HomeScreen() {
   const { 
     currentUser, 
     activeGroupId,
+    setActiveGroupId,
+    isHydrated,
   } = useGameStore();
   
   const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
-  const isLoading = sessionLoading || groupsLoading;
+  const isLoading = sessionLoading || groupsLoading || !isHydrated;
+
+  useEffect(() => {
+    if (!groupsLoading && groups.length > 0 && !activeGroupId) {
+      console.log('🎯 Auto-selecting group:', groups[0].name);
+      setActiveGroupId(groups[0].id);
+    }
+  }, [groups, groupsLoading, activeGroupId, setActiveGroupId]);
 
   useEffect(() => {
     setIsMounted(true);

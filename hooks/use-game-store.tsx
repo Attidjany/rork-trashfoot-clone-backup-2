@@ -1,7 +1,10 @@
 import createContextHook from '@nkzw/create-context-hook'; 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Player, Group, Competition, Match, ChatMessage, PlayerStats, KnockoutBracket, TournamentRound } from '@/types/game';
 import { supabase } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const ACTIVE_GROUP_KEY = '@active_group_id';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -72,6 +75,43 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const loadActiveGroupId = async () => {
+      try {
+        const savedGroupId = await AsyncStorage.getItem(ACTIVE_GROUP_KEY);
+        if (savedGroupId) {
+          console.log('📦 Loaded active group ID from storage:', savedGroupId);
+          setActiveGroupId(savedGroupId);
+        }
+      } catch (error) {
+        console.error('Error loading active group ID:', error);
+      } finally {
+        setIsHydrated(true);
+      }
+    };
+    loadActiveGroupId();
+  }, []);
+
+  const persistActiveGroupId = useCallback(async (groupId: string | null) => {
+    try {
+      if (groupId) {
+        await AsyncStorage.setItem(ACTIVE_GROUP_KEY, groupId);
+        console.log('💾 Saved active group ID to storage:', groupId);
+      } else {
+        await AsyncStorage.removeItem(ACTIVE_GROUP_KEY);
+        console.log('🗑️ Removed active group ID from storage');
+      }
+    } catch (error) {
+      console.error('Error persisting active group ID:', error);
+    }
+  }, []);
+
+  const setActiveGroupIdWithPersist = useCallback((groupId: string | null) => {
+    setActiveGroupId(groupId);
+    persistActiveGroupId(groupId);
+  }, [persistActiveGroupId]);
 
   const activeGroup = useMemo(() => {
     return groups.find(g => g.id === activeGroupId) || null;
@@ -152,7 +192,7 @@ if (memberError && String((memberError as any).code) !== '23505') {
       };
 
       setGroups(prev => [...prev, newGroup]);
-      setActiveGroupId(newGroup.id);
+      setActiveGroupIdWithPersist(newGroup.id);
       return newGroup;
     } catch (error) {
       console.error('Error creating group:', error);
@@ -240,7 +280,7 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
         return [...prev, joined];
       });
 
-      setActiveGroupId(joined.id);
+      setActiveGroupIdWithPersist(joined.id);
       return joined;
     } catch (error) {
       console.error('Error joining group:', error);
@@ -631,6 +671,7 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
       setGroups([]);
       setActiveGroupId(null);
       setMessages([]);
+      await persistActiveGroupId(null);
       
       const { error } = await supabase.auth.signOut();
       if (error) {
@@ -643,7 +684,7 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
       console.error('❌ Error during logout:', error);
       throw error;
     }
-  }, []);
+  }, [persistActiveGroupId]);
 
   const getRoundName = (round: number, totalRounds: number): string => {
     if (round === totalRounds - 1) return 'Final';
@@ -877,6 +918,7 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
     activeGroupId,
     messages: getGroupMessages(activeGroupId || ''),
     isLoading,
+    isHydrated,
     createGroup,
     joinGroup,
     createCompetition,
@@ -884,7 +926,7 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
     updateMatchResult,
     sendMessage,
     shareYoutubeLink,
-    setActiveGroupId,
+    setActiveGroupId: setActiveGroupIdWithPersist,
     getPlayerStats,
     getHeadToHead,
     generateMatches,
