@@ -81,6 +81,69 @@ export function useRealtimeGroups(userId: string | undefined) {
             .select('*')
             .eq('group_id', groupId);
 
+          const competitionsWithMatches = await Promise.all(
+            (competitions || []).map(async (comp: any) => {
+              const { data: matches } = await supabase
+                .from('matches')
+                .select('*')
+                .eq('competition_id', comp.id);
+
+              const { data: participants } = await supabase
+                .from('competition_participants')
+                .select('player_id')
+                .eq('competition_id', comp.id);
+
+              return {
+                id: comp.id,
+                name: comp.name,
+                type: comp.type,
+                status: comp.status,
+                startDate: comp.start_date,
+                endDate: comp.end_date,
+                tournamentType: comp.tournament_type,
+                leagueFormat: comp.league_format,
+                friendlyType: comp.friendly_type,
+                friendlyTarget: comp.friendly_target,
+                knockoutMinPlayers: comp.knockout_min_players,
+                matches: (matches || []).map((m: any) => ({
+                  id: m.id,
+                  competitionId: m.competition_id,
+                  homePlayerId: m.home_player_id,
+                  awayPlayerId: m.away_player_id,
+                  homeScore: m.home_score,
+                  awayScore: m.away_score,
+                  status: m.status,
+                  scheduledTime: m.scheduled_time,
+                  completedAt: m.completed_at,
+                  youtubeLink: m.youtube_link,
+                })),
+                participants: (participants || []).map((p: any) => ({
+                  id: p.player_id,
+                  name: '',
+                  gamerHandle: '',
+                  email: '',
+                  role: 'player' as const,
+                  status: 'active' as const,
+                  joinedAt: '',
+                  stats: {
+                    played: 0,
+                    wins: 0,
+                    draws: 0,
+                    losses: 0,
+                    goalsFor: 0,
+                    goalsAgainst: 0,
+                    cleanSheets: 0,
+                    points: 0,
+                    winRate: 0,
+                    form: [],
+                    leaguesWon: 0,
+                    knockoutsWon: 0,
+                  },
+                })),
+              };
+            })
+          );
+
           const membersList: Player[] = (members || []).map((m: any) => ({
             id: m.players.id,
             name: m.players.name,
@@ -113,7 +176,7 @@ export function useRealtimeGroups(userId: string | undefined) {
             adminIds: [gm.groups.admin_id],
             members: membersList,
             createdAt: gm.groups.created_at,
-            competitions: competitions || [],
+            competitions: competitionsWithMatches,
             inviteCode: gm.groups.invite_code,
             isPublic: gm.groups.is_public,
             pendingMembers: [],

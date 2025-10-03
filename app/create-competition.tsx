@@ -6,6 +6,7 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -20,9 +21,10 @@ export default function CreateCompetitionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useSession();
-  const { groups } = useRealtimeGroups(user?.id);
+  const { groups, refetch } = useRealtimeGroups(user?.id);
   const { activeGroupId } = useGameStore();
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0];
+  const [isCreating, setIsCreating] = useState(false);
   
   const [name, setName] = useState('');
   const [type, setType] = useState<'league' | 'tournament' | 'friendly'>('league');
@@ -89,6 +91,7 @@ export default function CreateCompetitionScreen() {
       }
     }
 
+    setIsCreating(true);
     try {
       console.log('Creating competition with data:', {
         groupId: activeGroup.id,
@@ -185,11 +188,15 @@ export default function CreateCompetitionScreen() {
       }
 
       console.log('✅ Competition created successfully:', competition);
-      alert(`Competition "${competition.name}" created successfully!`);
+      
+      await refetch();
+      
       router.back();
     } catch (error: any) {
       console.error('❌ Error creating competition:', error);
       alert(error?.message || 'Failed to create competition');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -451,12 +458,17 @@ export default function CreateCompetitionScreen() {
         <TouchableOpacity
           style={styles.createButton}
           onPress={handleCreate}
+          disabled={isCreating}
         >
           <LinearGradient
             colors={['#0EA5E9', '#8B5CF6']}
             style={styles.createButtonGradient}
           >
-            <Text style={styles.createButtonText}>Create</Text>
+            {isCreating ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.createButtonText}>Create</Text>
+            )}
           </LinearGradient>
         </TouchableOpacity>
       </View>
