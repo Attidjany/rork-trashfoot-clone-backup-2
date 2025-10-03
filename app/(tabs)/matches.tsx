@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Match, Competition } from '@/types/game';
 import { useSession } from '@/hooks/use-session';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
-import { trpc } from '@/lib/trpc';
+import { supabase } from '@/lib/supabase';
 
 export default function MatchesScreen() {
   const router = useRouter();
@@ -26,20 +26,7 @@ export default function MatchesScreen() {
   const { user, loading: sessionLoading } = useSession();
   const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups(user?.id);
   const { activeGroupId, shareYoutubeLink, deleteMatch, currentUser } = useGameStore();
-  
-  const utils = trpc.useUtils();
-  const updateMatchMutation = trpc.matches.updateResult.useMutation({
-    onSuccess: () => {
-      utils.competitions.getGroupCompetitions.invalidate();
-      refetchGroups();
-    },
-  });
-  const correctScoreMutation = trpc.matches.correctScore.useMutation({
-    onSuccess: () => {
-      utils.competitions.getGroupCompetitions.invalidate();
-      refetchGroups();
-    },
-  });
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
   const isLoading = sessionLoading || groupsLoading;
@@ -91,34 +78,45 @@ export default function MatchesScreen() {
       return;
     }
     
+    setIsSubmitting(true);
+    
     try {
       console.log('🎯 Submitting result:', { matchId: selectedMatch.id, homeScore: homeScoreNum, awayScore: awayScoreNum });
       
-      if (selectedMatch.status === 'completed') {
-        await correctScoreMutation.mutateAsync({
-          matchId: selectedMatch.id,
-          homeScore: homeScoreNum,
-          awayScore: awayScoreNum,
-        });
-        console.log('✅ Score corrected successfully');
-        Alert.alert('Success', 'Score corrected successfully');
-      } else {
-        await updateMatchMutation.mutateAsync({
-          matchId: selectedMatch.id,
-          homeScore: homeScoreNum,
-          awayScore: awayScoreNum,
-        });
-        console.log('✅ Match result submitted successfully');
-        Alert.alert('Success', 'Match result submitted successfully');
+      const updateData: any = {
+        home_score: homeScoreNum,
+        away_score: awayScoreNum,
+      };
+      
+      if (selectedMatch.status !== 'completed') {
+        updateData.status = 'completed';
+        updateData.completed_at = new Date().toISOString();
       }
+      
+      const { error } = await supabase
+        .from('matches')
+        .update(updateData)
+        .eq('id', selectedMatch.id);
+      
+      if (error) {
+        console.error('❌ Error updating match:', error);
+        throw new Error(error.message);
+      }
+      
+      console.log('✅ Match result submitted successfully');
+      Alert.alert('Success', selectedMatch.status === 'completed' ? 'Score corrected successfully' : 'Match result submitted successfully');
       
       setResultModal(false);
       setSelectedMatch(null);
       setHomeScore('');
       setAwayScore('');
+      
+      await refetchGroups();
     } catch (error: any) {
       console.error('❌ Error submitting result:', error);
       Alert.alert('Error', error?.message || 'Failed to submit result');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -473,12 +471,17 @@ export default function MatchesScreen() {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.submitButton}
+                style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
                 onPress={handleSubmitResult}
+                disabled={isSubmitting}
               >
-                <Text style={styles.submitButtonText}>
-                  {selectedMatch?.status === 'completed' ? 'Update' : 'Submit'}
-                </Text>
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>
+                    {selectedMatch?.status === 'completed' ? 'Update' : 'Submit'}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -804,6 +807,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600' as const,
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
   },
   checkboxContainer: {
     flexDirection: 'row',
