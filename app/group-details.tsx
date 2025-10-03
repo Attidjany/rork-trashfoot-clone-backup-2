@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,13 +7,13 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { 
   Users, 
   Trophy, 
   Plus, 
-  Calendar,
   Target,
   Crown,
   Settings,
@@ -23,32 +23,27 @@ import {
   CheckCircle,
   User
 } from 'lucide-react-native';
-import { useGameStore } from '@/hooks/use-game-store';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSession } from '@/hooks/use-session';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AchievementBadges } from '@/components/AchievementBadges';
+import { supabase } from '@/lib/supabase';
+import { Group } from '@/types/game';
 
 export default function GroupDetailsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  
-  const { 
-    groups, 
-    currentUser, 
-    createCompetition, 
-    generateMatches,
-    updateMatchResult,
-    shareYoutubeLink,
-    deleteMatch,
-    correctMatchScore
-  } = useGameStore();
+  const { user } = useSession();
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
   
   const [activeTab, setActiveTab] = useState<'overview' | 'matches' | 'members'>('overview');
   const [createCompModal, setCreateCompModal] = useState(false);
   const [compName, setCompName] = useState('');
   const [compType, setCompType] = useState<'league' | 'tournament' | 'friendly'>('league');
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [group, setGroup] = useState<Group | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [playerId, setPlayerId] = useState<string | null>(null);
   
   // League options
   const [leagueFormat, setLeagueFormat] = useState<'single' | 'double'>('single');
@@ -64,11 +59,52 @@ export default function GroupDetailsScreen() {
   const [newHomeScore, setNewHomeScore] = useState('');
   const [newAwayScore, setNewAwayScore] = useState('');
 
-  const group = groups.find(g => g.id === groupId);
-  const isAdmin = (group?.adminIds && group.adminIds.includes(currentUser?.id || '')) || 
-                  group?.adminId === currentUser?.id || false;
+  useEffect(() => {
+    const fetchGroupDetails = async () => {
+      if (!groupId || !user) {
+        setIsLoading(false);
+        return;
+      }
 
-  if (!group || !currentUser) {
+      try {
+        const { data: player } = await supabase
+          .from('players')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .single();
+
+        if (player) {
+          setPlayerId(player.id);
+        }
+
+        const foundGroup = groups.find(g => g.id === groupId);
+        if (foundGroup) {
+          setGroup(foundGroup);
+        }
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error fetching group details:', error);
+        setIsLoading(false);
+      }
+    };
+
+    fetchGroupDetails();
+  }, [groupId, user, groups]);
+
+  const isAdmin = group && playerId && (group.adminId === playerId || group.adminIds?.includes(playerId));
+
+  if (isLoading || groupsLoading) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: 'Loading...' }} />
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#0EA5E9" />
+        </View>
+      </View>
+    );
+  }
+
+  if (!group || !user) {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ title: 'Group Not Found' }} />
@@ -90,73 +126,176 @@ export default function GroupDetailsScreen() {
     c.matches.map(m => ({ ...m, competitionName: c.name, competitionType: c.type }))
   );
 
-  const handleCreateCompetition = () => {
+  const handleCreateCompetition = async () => {
     if (!compName.trim()) {
-      console.log('Error: Please enter a competition name');
+      alert('Please enter a competition name');
       return;
     }
     
-    // Validation based on competition type
     if (compType === 'friendly') {
       if (selectedParticipants.length !== 2) {
-        console.log('Error: Friendly matches require exactly 2 players');
+        alert('Friendly matches require exactly 2 players');
         return;
       }
     } else if (compType === 'tournament') {
       if (selectedParticipants.length < 4) {
-        console.log('Error: Tournaments require at least 4 players');
+        alert('Tournaments require at least 4 players');
         return;
       }
       if (selectedParticipants.length > 32) {
-        console.log('Error: Tournaments support maximum 32 players');
+        alert('Tournaments support maximum 32 players');
         return;
       }
-      // Check if it's a power of 2 for simple knockout
       const isPowerOf2 = (selectedParticipants.length & (selectedParticipants.length - 1)) === 0;
       if (!isPowerOf2) {
-        console.log('Error: Tournament requires a power of 2 number of players (4, 8, 16, 32)');
+        alert('Tournament requires a power of 2 number of players (4, 8, 16, 32)');
         return;
       }
     } else {
       if (selectedParticipants.length < 2) {
-        console.log('Error: Please select at least 2 players');
+        alert('Please select at least 2 players');
         return;
       }
     }
 
-    const options: any = {};
-    
-    if (compType === 'league') {
-      options.leagueFormat = leagueFormat;
-    } else if (compType === 'friendly') {
-      options.friendlyType = friendlyType;
-      options.friendlyTarget = parseInt(friendlyTarget) || 3;
-    } else if (compType === 'tournament') {
-      options.tournamentType = tournamentType;
-      options.knockoutMinPlayers = 4;
+    try {
+      const { data: competition, error: compError } = await supabase
+        .from('competitions')
+        .insert({
+          group_id: group.id,
+          name: compName.trim(),
+          type: compType,
+          status: 'upcoming',
+          start_date: new Date().toISOString(),
+          tournament_type: compType === 'tournament' ? tournamentType : null,
+          league_format: compType === 'league' ? leagueFormat : null,
+          friendly_type: compType === 'friendly' ? friendlyType : null,
+          friendly_target: compType === 'friendly' ? parseInt(friendlyTarget) || 3 : null,
+          knockout_min_players: compType === 'tournament' ? 4 : null,
+        })
+        .select()
+        .single();
+
+      if (compError || !competition) {
+        console.error('Error creating competition:', compError);
+        alert(`Failed to create competition: ${compError?.message || 'Unknown error'}`);
+        return;
+      }
+
+      const participantInserts = selectedParticipants.map(playerId => ({
+        competition_id: competition.id,
+        player_id: playerId,
+      }));
+
+      const { error: participantsError } = await supabase
+        .from('competition_participants')
+        .insert(participantInserts);
+
+      if (participantsError) {
+        console.error('Error adding participants:', participantsError);
+        await supabase.from('competitions').delete().eq('id', competition.id);
+        alert(`Failed to add participants: ${participantsError.message}`);
+        return;
+      }
+
+      const matches = generateMatches(
+        competition.id,
+        selectedParticipants,
+        compType,
+        leagueFormat,
+        parseInt(friendlyTarget) || 3,
+        tournamentType
+      );
+
+      if (matches.length > 0) {
+        const { error: matchesError } = await supabase
+          .from('matches')
+          .insert(matches);
+
+        if (matchesError) {
+          console.error('Error creating matches:', matchesError);
+        } else {
+          await supabase
+            .from('competitions')
+            .update({ status: 'active' })
+            .eq('id', competition.id);
+        }
+      }
+
+      alert(`Competition "${competition.name}" created successfully!`);
+      setCreateCompModal(false);
+      setCompName('');
+      setSelectedParticipants([]);
+      setLeagueFormat('single');
+      setFriendlyType('best_of');
+      setFriendlyTarget('3');
+      setTournamentType('knockout');
+    } catch (error: any) {
+      console.error('Error creating competition:', error);
+      alert(error?.message || 'Failed to create competition');
+    }
+  };
+
+  function generateMatches(
+    competitionId: string,
+    participantIds: string[],
+    type: 'league' | 'tournament' | 'friendly',
+    leagueFormat?: 'single' | 'double',
+    friendlyTarget?: number,
+    tournamentType?: 'knockout'
+  ) {
+    const matches: any[] = [];
+    const baseTime = Date.now();
+
+    if (type === 'league') {
+      for (let i = 0; i < participantIds.length; i++) {
+        for (let j = i + 1; j < participantIds.length; j++) {
+          matches.push({
+            competition_id: competitionId,
+            home_player_id: participantIds[i],
+            away_player_id: participantIds[j],
+            status: 'scheduled',
+            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+          });
+
+          if (leagueFormat === 'double') {
+            matches.push({
+              competition_id: competitionId,
+              home_player_id: participantIds[j],
+              away_player_id: participantIds[i],
+              status: 'scheduled',
+              scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+            });
+          }
+        }
+      }
+    } else if (type === 'friendly' && participantIds.length === 2) {
+      const matchCount = friendlyTarget || 1;
+      for (let i = 0; i < matchCount; i++) {
+        matches.push({
+          competition_id: competitionId,
+          home_player_id: participantIds[0],
+          away_player_id: participantIds[1],
+          status: 'scheduled',
+          scheduled_time: new Date(baseTime + i * 86400000).toISOString(),
+        });
+      }
+    } else if (type === 'tournament' && tournamentType === 'knockout') {
+      for (let i = 0; i < participantIds.length; i += 2) {
+        if (i + 1 < participantIds.length) {
+          matches.push({
+            competition_id: competitionId,
+            home_player_id: participantIds[i],
+            away_player_id: participantIds[i + 1],
+            status: 'scheduled',
+            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+          });
+        }
+      }
     }
 
-    console.log('Creating competition with:', { name: compName.trim(), type: compType, selectedParticipants, options });
-    
-    const competition = createCompetition(compName.trim(), compType, selectedParticipants, options);
-    
-    if (competition) {
-      console.log('Competition created successfully:', competition);
-      // Auto-generate matches based on competition type
-      generateMatches(competition.id);
-      console.log(`Generated matches for ${compType} competition:`, competition.name);
-    } else {
-      console.log('Failed to create competition');
-    }
-    
-    setCreateCompModal(false);
-    setCompName('');
-    setSelectedParticipants([]);
-    setLeagueFormat('single');
-    setFriendlyType('best_of');
-    setFriendlyTarget('3');
-    setTournamentType('knockout');
-  };
+    return matches;
+  }
 
   const toggleParticipant = (playerId: string) => {
     setSelectedParticipants(prev => 
@@ -272,7 +411,7 @@ export default function GroupDetailsScreen() {
           const homePlayer = group.members.find(m => m.id === match.homePlayerId);
           const awayPlayer = group.members.find(m => m.id === match.awayPlayerId);
           const canUpdateScore = isAdmin || 
-            (match.homePlayerId === currentUser.id || match.awayPlayerId === currentUser.id);
+            (match.homePlayerId === playerId || match.awayPlayerId === playerId);
           
           return (
             <View key={match.id} style={styles.matchCard}>
@@ -318,10 +457,7 @@ export default function GroupDetailsScreen() {
                   <TouchableOpacity
                     style={styles.actionButton}
                     onPress={() => {
-                      // In a real app, this would open a modal to input scores
-                      const homeScore = Math.floor(Math.random() * 5);
-                      const awayScore = Math.floor(Math.random() * 5);
-                      updateMatchResult(match.id, homeScore, awayScore);
+                      alert('Match score update coming soon');
                     }}
                   >
                     <Text style={styles.actionButtonText}>Update Score</Text>
@@ -330,22 +466,25 @@ export default function GroupDetailsScreen() {
                   <TouchableOpacity
                     style={[styles.actionButton, styles.liveButton]}
                     onPress={() => {
-                      // In a real app, this would open a modal to input YouTube link
-                      const demoLink = 'https://youtube.com/watch?v=demo';
-                      shareYoutubeLink(match.id, demoLink);
+                      alert('Live link sharing coming soon');
                     }}
                   >
                     <Text style={styles.actionButtonText}>Share Live Link</Text>
                   </TouchableOpacity>
                   
-                  {(isAdmin || match.homePlayerId === currentUser.id || match.awayPlayerId === currentUser.id) && (
+                  {(isAdmin || match.homePlayerId === playerId || match.awayPlayerId === playerId) && (
                     <TouchableOpacity
                       style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => {
-                        if (deleteMatch(match.id)) {
-                          console.log('Match deleted successfully');
+                      onPress={async () => {
+                        const { error } = await supabase
+                          .from('matches')
+                          .delete()
+                          .eq('id', match.id);
+                        
+                        if (error) {
+                          alert('Failed to delete match');
                         } else {
-                          console.log('Failed to delete match');
+                          alert('Match deleted successfully');
                         }
                       }}
                     >
@@ -717,12 +856,20 @@ export default function GroupDetailsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.submitButton}
-                onPress={() => {
+                onPress={async () => {
                   if (selectedMatch && newHomeScore && newAwayScore) {
-                    if (correctMatchScore(selectedMatch.id, parseInt(newHomeScore), parseInt(newAwayScore))) {
-                      console.log('Score corrected successfully');
+                    const { error } = await supabase
+                      .from('matches')
+                      .update({
+                        home_score: parseInt(newHomeScore),
+                        away_score: parseInt(newAwayScore),
+                      })
+                      .eq('id', selectedMatch.id);
+                    
+                    if (error) {
+                      alert('Failed to correct score');
                     } else {
-                      console.log('Failed to correct score');
+                      alert('Score corrected successfully');
                     }
                     setCorrectScoreModal(false);
                     setSelectedMatch(null);

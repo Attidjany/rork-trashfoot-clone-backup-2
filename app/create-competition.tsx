@@ -53,8 +53,8 @@ export default function CreateCompetitionScreen() {
   }
 
   const handleCreate = async () => {
-    if (!activeGroup) {
-      alert('No active group selected');
+    if (!activeGroup || !user) {
+      alert('No active group selected or user not authenticated');
       return;
     }
 
@@ -97,6 +97,28 @@ export default function CreateCompetitionScreen() {
         participantIds: selectedPlayers,
       });
 
+      const { data: player } = await supabase
+        .from('players')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (!player) {
+        alert('Player profile not found');
+        return;
+      }
+
+      const { data: group } = await supabase
+        .from('groups')
+        .select('admin_id')
+        .eq('id', activeGroup.id)
+        .single();
+
+      if (!group || group.admin_id !== player.id) {
+        alert('Only group admins can create competitions');
+        return;
+      }
+
       const { data: competition, error: compError } = await supabase
         .from('competitions')
         .insert({
@@ -116,7 +138,7 @@ export default function CreateCompetitionScreen() {
 
       if (compError || !competition) {
         console.error('Error creating competition:', compError);
-        alert('Failed to create competition');
+        alert(`Failed to create competition: ${compError?.message || 'Unknown error'}`);
         return;
       }
 
@@ -132,7 +154,7 @@ export default function CreateCompetitionScreen() {
       if (participantsError) {
         console.error('Error adding participants:', participantsError);
         await supabase.from('competitions').delete().eq('id', competition.id);
-        alert('Failed to add participants');
+        alert(`Failed to add participants: ${participantsError.message}`);
         return;
       }
 
@@ -152,12 +174,13 @@ export default function CreateCompetitionScreen() {
 
         if (matchesError) {
           console.error('Error creating matches:', matchesError);
+          alert(`Warning: Competition created but matches failed: ${matchesError.message}`);
+        } else {
+          await supabase
+            .from('competitions')
+            .update({ status: 'active' })
+            .eq('id', competition.id);
         }
-
-        await supabase
-          .from('competitions')
-          .update({ status: 'active' })
-          .eq('id', competition.id);
       }
 
       console.log('✅ Competition created successfully:', competition);
