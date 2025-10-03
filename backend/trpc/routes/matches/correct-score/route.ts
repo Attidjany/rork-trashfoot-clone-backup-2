@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { publicProcedure } from "../../../create-context";
+import { protectedProcedure } from "../../../create-context";
 import { supabaseAdmin } from "../../../../lib/supabase-server";
 
-export const correctMatchScoreProcedure = publicProcedure
+export const correctMatchScoreProcedure = protectedProcedure
   .input(
     z.object({
       matchId: z.string().uuid(),
@@ -14,20 +14,16 @@ export const correctMatchScoreProcedure = publicProcedure
     try {
       console.log("🔄 Correcting match score:", input);
 
-      const supabase = supabaseAdmin;
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
+      if (!ctx.user) {
         throw new Error("Not authenticated");
       }
+
+      const supabase = supabaseAdmin;
 
       const { data: player } = await supabase
         .from("players")
         .select("id")
-        .eq("auth_user_id", user.id)
+        .eq("auth_user_id", ctx.user.id)
         .single();
 
       if (!player) {
