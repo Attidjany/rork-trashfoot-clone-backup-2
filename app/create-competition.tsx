@@ -13,14 +13,16 @@ import { Trophy, Users, Calendar } from 'lucide-react-native';
 import { trpc } from '@/lib/trpc';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { useSession } from '@/hooks/use-session';
+import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function CreateCompetitionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useSession();
-  const { groups } = useRealtimeGroups(session?.user?.id);
-  const activeGroup = groups[0];
+  const { user } = useSession();
+  const { groups } = useRealtimeGroups(user?.id);
+  const { activeGroupId } = useGameStore();
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0];
   const createCompetitionMutation = trpc.competitions.create.useMutation();
   
   const [name, setName] = useState('');
@@ -38,8 +40,17 @@ export default function CreateCompetitionScreen() {
   const [tournamentType, setTournamentType] = useState<'knockout'>('knockout');
 
   if (!activeGroup) {
-    router.back();
-    return null;
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#fff', fontSize: 16 }}>No active group. Please select a group first.</Text>
+        <TouchableOpacity
+          style={{ marginTop: 16, backgroundColor: '#0EA5E9', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+          onPress={() => router.back()}
+        >
+          <Text style={{ color: '#fff', fontWeight: '600' as const }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   const handleCreate = async () => {
@@ -80,6 +91,13 @@ export default function CreateCompetitionScreen() {
     }
 
     try {
+      console.log('Creating competition with data:', {
+        groupId: activeGroup.id,
+        name: name.trim(),
+        type,
+        participantIds: selectedPlayers,
+      });
+
       const result = await createCompetitionMutation.mutateAsync({
         groupId: activeGroup.id,
         name: name.trim(),
@@ -93,11 +111,12 @@ export default function CreateCompetitionScreen() {
       });
 
       if (result.success) {
-        console.log('Competition created successfully:', result.competition);
+        console.log('✅ Competition created successfully:', result.competition);
+        alert(`Competition "${result.competition.name}" created successfully!`);
         router.back();
       }
     } catch (error: any) {
-      console.error('Error creating competition:', error);
+      console.error('❌ Error creating competition:', error);
       alert(error?.message || 'Failed to create competition');
     }
   };
@@ -239,7 +258,7 @@ export default function CreateCompetitionScreen() {
             {type === 'league' && ' - Need at least 2'}
           </Text>
           <View style={styles.playerList}>
-            {activeGroup.members.map(player => (
+            {activeGroup.members && activeGroup.members.length > 0 ? activeGroup.members.map(player => (
               <TouchableOpacity
                 key={player.id}
                 style={[
@@ -266,7 +285,9 @@ export default function CreateCompetitionScreen() {
                   )}
                 </View>
               </TouchableOpacity>
-            ))}
+            )) : (
+              <Text style={{ color: '#64748B', textAlign: 'center', padding: 16 }}>No members found in this group</Text>
+            )}
           </View>
         </View>
 

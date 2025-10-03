@@ -42,18 +42,29 @@ export default function GroupBrowserScreen() {
   const [isCreating, setIsCreating] = useState(false);
 
   const fetchPublicGroups = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('No user, skipping fetch');
+      return;
+    }
     try {
-      const { data: player } = await supabase
+      console.log('🔍 Fetching public groups for user:', user.id);
+      const { data: player, error: playerError } = await supabase
         .from('players')
         .select('id')
         .eq('auth_user_id', user.id)
         .single();
 
+      if (playerError) {
+        console.error('❌ Error fetching player:', playerError);
+      }
+
       if (!player) {
+        console.log('⚠️ No player found for user');
         setAvailableGroups([]);
         return;
       }
+
+      console.log('✅ Found player:', player.id);
 
       const { data: groups, error } = await supabase
         .from('groups')
@@ -61,9 +72,11 @@ export default function GroupBrowserScreen() {
         .eq('is_public', true);
 
       if (error) {
-        console.error('Error fetching groups:', error);
+        console.error('❌ Error fetching groups:', error);
         return;
       }
+
+      console.log('📊 Found', groups?.length || 0, 'public groups');
 
       const { data: userGroups } = await supabase
         .from('group_members')
@@ -71,7 +84,9 @@ export default function GroupBrowserScreen() {
         .eq('player_id', player.id);
 
       const userGroupIds = new Set(userGroups?.map((g: any) => g.group_id) || []);
+      console.log('👤 User is member of', userGroupIds.size, 'groups');
       const filteredGroups = (groups || []).filter((g: any) => !userGroupIds.has(g.id));
+      console.log('🔍 Filtered to', filteredGroups.length, 'available groups');
 
       const groupsWithCounts = await Promise.all(
         filteredGroups.map(async (group: any) => {
@@ -92,9 +107,10 @@ export default function GroupBrowserScreen() {
         })
       );
 
+      console.log('✅ Setting', groupsWithCounts.length, 'groups with member counts');
       setAvailableGroups(groupsWithCounts);
     } catch (error) {
-      console.error('Error in fetchPublicGroups:', error);
+      console.error('❌ Error in fetchPublicGroups:', error);
     }
   }, [user]);
 
