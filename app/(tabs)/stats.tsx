@@ -26,9 +26,19 @@ export default function StatsScreen() {
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [showFullTable, setShowFullTable] = useState<{ [key: string]: boolean }>({});
 
-  // Calculate league-specific stats
+  const allMatches = useMemo(() => {
+    if (!activeGroup) return [];
+    return activeGroup.competitions.flatMap(c => c.matches);
+  }, [activeGroup]);
+
+  const completedMatchesCount = useMemo(() => {
+    return allMatches.filter(m => m.status === 'completed').length;
+  }, [allMatches]);
+
   const leagueStats = useMemo(() => {
     if (!activeGroup) return [];
+    
+    console.log('📊 Recalculating league stats, completed matches:', completedMatchesCount);
     
     return activeGroup.competitions
       .filter(comp => comp.type === 'league')
@@ -89,7 +99,7 @@ export default function StatsScreen() {
           players: leaguePlayerStats,
         };
       });
-  }, [activeGroup]);
+  }, [activeGroup, completedMatchesCount]);
 
   if (isLoading) {
     return (
