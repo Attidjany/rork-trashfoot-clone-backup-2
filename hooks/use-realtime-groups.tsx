@@ -1,8 +1,63 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Group, Player } from '@/types/game';
+import { Group, Player, Match, PlayerStats } from '@/types/game';
 import { supabase } from '@/lib/supabase';
 
 const POLLING_INTERVAL = 5000;
+
+function calculatePlayerStats(playerId: string, matches: Match[]): PlayerStats {
+  const playerMatches = matches.filter(
+    m => (m.homePlayerId === playerId || m.awayPlayerId === playerId) && m.status === 'completed'
+  );
+
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+  let goalsFor = 0;
+  let goalsAgainst = 0;
+  let cleanSheets = 0;
+  const form: ('W' | 'D' | 'L')[] = [];
+
+  playerMatches.forEach(match => {
+    const isHome = match.homePlayerId === playerId;
+    const playerScore = isHome ? match.homeScore! : match.awayScore!;
+    const opponentScore = isHome ? match.awayScore! : match.homeScore!;
+
+    goalsFor += playerScore;
+    goalsAgainst += opponentScore;
+
+    if (opponentScore === 0) cleanSheets++;
+
+    if (playerScore > opponentScore) {
+      wins++;
+      form.unshift('W');
+    } else if (playerScore === opponentScore) {
+      draws++;
+      form.unshift('D');
+    } else {
+      losses++;
+      form.unshift('L');
+    }
+  });
+
+  const played = wins + draws + losses;
+  const points = wins * 3 + draws;
+  const winRate = played > 0 ? (wins / played) * 100 : 0;
+
+  return {
+    played,
+    wins,
+    draws,
+    losses,
+    goalsFor,
+    goalsAgainst,
+    cleanSheets,
+    points,
+    winRate,
+    form: form.slice(0, 5),
+    leaguesWon: 0,
+    knockoutsWon: 0,
+  };
+}
 
 export function useRealtimeGroups(userId: string | undefined) {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -95,6 +150,7 @@ export function useRealtimeGroups(userId: string | undefined) {
 
               return {
                 id: comp.id,
+                groupId: comp.group_id,
                 name: comp.name,
                 type: comp.type,
                 status: comp.status,
@@ -117,33 +173,13 @@ export function useRealtimeGroups(userId: string | undefined) {
                   completedAt: m.completed_at,
                   youtubeLink: m.youtube_link,
                 })),
-                participants: (participants || []).map((p: any) => ({
-                  id: p.player_id,
-                  name: '',
-                  gamerHandle: '',
-                  email: '',
-                  role: 'player' as const,
-                  status: 'active' as const,
-                  joinedAt: '',
-                  stats: {
-                    played: 0,
-                    wins: 0,
-                    draws: 0,
-                    losses: 0,
-                    goalsFor: 0,
-                    goalsAgainst: 0,
-                    cleanSheets: 0,
-                    points: 0,
-                    winRate: 0,
-                    form: [],
-                    leaguesWon: 0,
-                    knockoutsWon: 0,
-                  },
-                })),
+                participants: (participants || []).map((p: any) => p.player_id),
               };
             })
           );
 
+          const allMatches = competitionsWithMatches.flatMap(c => c.matches);
+          
           const membersList: Player[] = (members || []).map((m: any) => ({
             id: m.players.id,
             name: m.players.name,
@@ -152,20 +188,7 @@ export function useRealtimeGroups(userId: string | undefined) {
             role: m.players.role,
             status: m.players.status,
             joinedAt: m.players.joined_at,
-            stats: {
-              played: 0,
-              wins: 0,
-              draws: 0,
-              losses: 0,
-              goalsFor: 0,
-              goalsAgainst: 0,
-              cleanSheets: 0,
-              points: 0,
-              winRate: 0,
-              form: [],
-              leaguesWon: 0,
-              knockoutsWon: 0,
-            },
+            stats: calculatePlayerStats(m.players.id, allMatches),
           }));
 
           return {

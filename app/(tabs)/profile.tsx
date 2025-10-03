@@ -322,6 +322,7 @@ export default function ProfileScreen() {
               console.log('🔓 Logging out...');
               await logoutFromStore();
               console.log('✅ Logged out successfully');
+              router.replace('/auth');
             } catch (e: any) {
               console.error('❌ Logout error:', e);
               Alert.alert('Logout error', e?.message ?? String(e));
