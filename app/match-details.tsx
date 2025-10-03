@@ -10,13 +10,19 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Trophy, Youtube } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGameStore } from '@/hooks/use-game-store';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
+import { useSession } from '@/hooks/use-session';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function MatchDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { activeGroup } = useGameStore();
+  const { activeGroupId } = useGameStore();
+  const { user } = useSession();
+  const { groups, isLoading } = useRealtimeGroups(user?.id);
+
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
 
   const match = activeGroup?.competitions
     .flatMap(c => c.matches)
@@ -25,6 +31,14 @@ export default function MatchDetailsScreen() {
   const competition = activeGroup?.competitions.find(c => c.id === match?.competitionId);
   const homePlayer = activeGroup?.members.find(m => m.id === match?.homePlayerId);
   const awayPlayer = activeGroup?.members.find(m => m.id === match?.awayPlayerId);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
+        <Text style={styles.errorText}>Loading...</Text>
+      </View>
+    );
+  }
 
   if (!match || !homePlayer || !awayPlayer) {
     return (

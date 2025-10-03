@@ -298,6 +298,10 @@ export default function ProfileScreen() {
         
         Alert.alert('Success', 'Profile updated successfully!');
         setEditProfileModal(false);
+        setEditName('');
+        setEditGamerHandle('');
+        setHandleAvailable(null);
+        setHandleSuggestions([]);
       }
     } catch (error: any) {
       console.error('❌ Profile update error:', error);
@@ -320,9 +324,19 @@ export default function ProfileScreen() {
           onPress: async () => {
             try {
               console.log('🔓 Logging out...');
+              
+              const { error } = await supabase.auth.signOut();
+              if (error) {
+                console.error('❌ Supabase signOut error:', error);
+                throw error;
+              }
+              
               await logoutFromStore();
               console.log('✅ Logged out successfully');
-              router.replace('/auth');
+              
+              setTimeout(() => {
+                router.replace('/auth');
+              }, 100);
             } catch (e: any) {
               console.error('❌ Logout error:', e);
               Alert.alert('Logout error', e?.message ?? String(e));
