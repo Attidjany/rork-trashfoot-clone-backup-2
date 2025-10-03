@@ -8,6 +8,7 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -17,13 +18,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Match, Competition } from '@/types/game';
 import { useSession } from '@/hooks/use-session';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
+import { trpc } from '@/lib/trpc';
 
 export default function MatchesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, loading: sessionLoading } = useSession();
   const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
-  const { activeGroupId, updateMatchResult, shareYoutubeLink, deleteMatch, correctMatchScore, currentUser } = useGameStore();
+  const { activeGroupId, shareYoutubeLink, deleteMatch, currentUser } = useGameStore();
+  
+  const updateMatchMutation = trpc.matches.updateResult.useMutation();
+  const correctScoreMutation = trpc.matches.correctScore.useMutation();
   
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
   const isLoading = sessionLoading || groupsLoading;
@@ -61,25 +66,34 @@ export default function MatchesScreen() {
     .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime());
   const knockoutTournaments = activeGroup.competitions.filter(c => c.type === 'tournament' && c.tournamentType === 'knockout');
 
-  const handleSubmitResult = () => {
+  const handleSubmitResult = async () => {
     if (!selectedMatch || !homeScore || !awayScore) return;
     
-    if (selectedMatch.status === 'completed') {
-      // Correcting existing score
-      if (correctMatchScore(selectedMatch.id, parseInt(homeScore), parseInt(awayScore))) {
+    try {
+      if (selectedMatch.status === 'completed') {
+        await correctScoreMutation.mutateAsync({
+          matchId: selectedMatch.id,
+          homeScore: parseInt(homeScore),
+          awayScore: parseInt(awayScore),
+        });
         console.log('Score corrected successfully');
       } else {
-        console.log('Failed to correct score');
+        await updateMatchMutation.mutateAsync({
+          matchId: selectedMatch.id,
+          homeScore: parseInt(homeScore),
+          awayScore: parseInt(awayScore),
+        });
+        console.log('Match result submitted successfully');
       }
-    } else {
-      // Adding new result
-      updateMatchResult(selectedMatch.id, parseInt(homeScore), parseInt(awayScore));
+      
+      setResultModal(false);
+      setSelectedMatch(null);
+      setHomeScore('');
+      setAwayScore('');
+    } catch (error: any) {
+      console.error('Error submitting result:', error);
+      Alert.alert('Error', error?.message || 'Failed to submit result');
     }
-    
-    setResultModal(false);
-    setSelectedMatch(null);
-    setHomeScore('');
-    setAwayScore('');
   };
 
   const handleShareYoutube = () => {
