@@ -29,7 +29,7 @@ export default function StatsScreen() {
   const allMatches = useMemo(() => {
     if (!activeGroup) return [];
     return activeGroup.competitions.flatMap(c => c.matches);
-  }, [activeGroup]);
+  }, [activeGroup?.id, activeGroup?.competitions]);
 
   const completedMatchesCount = useMemo(() => {
     return allMatches.filter(m => m.status === 'completed').length;
@@ -38,7 +38,7 @@ export default function StatsScreen() {
   const leagueStats = useMemo(() => {
     if (!activeGroup) return [];
     
-    console.log('📊 Recalculating league stats, completed matches:', completedMatchesCount);
+    console.log('📊 Recalculating league stats, completed matches:', completedMatchesCount, 'timestamp:', Date.now());
     
     return activeGroup.competitions
       .filter(comp => comp.type === 'league')
@@ -101,6 +101,11 @@ export default function StatsScreen() {
       });
   }, [activeGroup, completedMatchesCount]);
 
+  const sortedPlayers = useMemo(() => {
+    if (!activeGroup) return [];
+    return [...activeGroup.members].sort((a, b) => b.stats.points - a.stats.points);
+  }, [activeGroup, completedMatchesCount]);
+
   if (isLoading) {
     return (
       <View style={styles.emptyContainer}>
@@ -118,8 +123,6 @@ export default function StatsScreen() {
       </View>
     );
   }
-
-  const sortedPlayers = [...activeGroup.members].sort((a, b) => b.stats.points - a.stats.points);
   
   const h2hData = selectedPlayers[0] && selectedPlayers[1] 
     ? getHeadToHead(selectedPlayers[0], selectedPlayers[1])
