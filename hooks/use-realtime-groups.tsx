@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Group, Player, Match, PlayerStats } from '@/types/game';
 import { supabase } from '@/lib/supabase';
-
-const POLLING_INTERVAL = 5000;
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 function calculatePlayerStats(playerId: string, matches: Match[]): PlayerStats {
   const playerMatches = matches.filter(
@@ -219,15 +218,79 @@ export function useRealtimeGroups(userId: string | undefined) {
   useEffect(() => {
     fetchGroups();
 
-    const interval = setInterval(() => {
-      console.log('Polling for group updates...');
-      fetchGroups();
-    }, POLLING_INTERVAL);
+    if (!userId) return;
+
+    const channels: RealtimeChannel[] = [];
+
+    const matchesChannel = supabase
+      .channel('matches-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'matches' },
+        (payload) => {
+          console.log('🔄 Match change detected:', payload);
+          fetchGroups();
+        }
+      )
+      .subscribe();
+
+    const competitionsChannel = supabase
+      .channel('competitions-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'competitions' },
+        (payload) => {
+          console.log('🔄 Competition change detected:', payload);
+          fetchGroups();
+        }
+      )
+      .subscribe();
+
+    const groupsChannel = supabase
+      .channel('groups-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'groups' },
+        (payload) => {
+          console.log('🔄 Group change detected:', payload);
+          fetchGroups();
+        }
+      )
+      .subscribe();
+
+    const groupMembersChannel = supabase
+      .channel('group-members-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'group_members' },
+        (payload) => {
+          console.log('🔄 Group member change detected:', payload);
+          fetchGroups();
+        }
+      )
+      .subscribe();
+
+    const playersChannel = supabase
+      .channel('players-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'players' },
+        (payload) => {
+          console.log('🔄 Player change detected:', payload);
+          fetchGroups();
+        }
+      )
+      .subscribe();
+
+    channels.push(matchesChannel, competitionsChannel, groupsChannel, groupMembersChannel, playersChannel);
 
     return () => {
-      clearInterval(interval);
+      console.log('🔌 Unsubscribing from real-time channels');
+      channels.forEach(channel => {
+        supabase.removeChannel(channel);
+      });
     };
-  }, [fetchGroups]);
+  }, [fetchGroups, userId]);
 
   return { groups, isLoading, error, refetch: fetchGroups };
 }
