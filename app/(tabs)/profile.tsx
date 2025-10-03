@@ -30,6 +30,7 @@ import { AchievementBadges } from '@/components/AchievementBadges';
 import { trpc } from '@/lib/trpc';
 import { useSession } from '@/hooks/use-session';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
+import { supabase } from '@/lib/supabase';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -63,7 +64,6 @@ export default function ProfileScreen() {
 
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
   const updateProfileMutation = trpc.auth.updateProfile.useMutation();
-  const createGroupMutation = trpc.groups.create.useMutation();
   const joinGroupMutation = trpc.groups.join.useMutation();
 
   const currentPlayer = activeGroup?.members.find(m => m.email === user?.email);
@@ -156,24 +156,73 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Please enter a group name');
       return;
     }
+    
+    if (!user) {
+      Alert.alert('Error', 'User not authenticated');
+      return;
+    }
 
     try {
       console.log('🔄 Creating group:', groupName);
-      const result = await createGroupMutation.mutateAsync({
-        name: groupName.trim(),
-        description: groupDescription.trim(),
-      });
+      
+      const { data: player } = await supabase
+        .from('players')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
 
-      console.log('✅ Group created:', result);
-
-      if (result.success) {
-        Alert.alert('Success', `Group "${result.group.name}" created!\n\nInvite Code: ${result.group.inviteCode}`);
-        setCreateGroupModal(false);
-        setGroupName('');
-        setGroupDescription('');
-        console.log('🔄 Setting active group ID:', result.group.id);
-        setActiveGroupId(result.group.id);
+      if (!player) {
+        Alert.alert('Error', 'Player not found');
+        return;
       }
+
+      const inviteCode = Math.random().toString(36).substr(2, 8).toUpperCase();
+
+      const { data: group, error: groupError } = await supabase
+        .from('groups')
+        .insert({
+          name: groupName.trim(),
+          description: groupDescription.trim() || '',
+          admin_id: player.id,
+          invite_code: inviteCode,
+          is_public: true,
+        })
+        .select()
+        .single();
+
+      if (groupError || !group) {
+        console.error('Error creating group:', groupError);
+        Alert.alert('Error', 'Failed to create group');
+        return;
+      }
+
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .insert({
+          group_id: group.id,
+          player_id: player.id,
+          is_admin: true,
+        });
+
+      if (memberError) {
+        console.error('Error adding member:', memberError);
+        Alert.alert('Error', 'Failed to add member to group');
+        return;
+      }
+
+      await supabase
+        .from('player_stats')
+        .insert({
+          player_id: player.id,
+          group_id: group.id,
+        });
+
+      console.log('✅ Group created:', group.name);
+      Alert.alert('Success', `Group "${group.name}" created!\n\nInvite Code: ${group.invite_code}`);
+      setCreateGroupModal(false);
+      setGroupName('');
+      setGroupDescription('');
+      setActiveGroupId(group.id);
     } catch (error: any) {
       console.error('❌ Error creating group:', error);
       Alert.alert('Error', error?.message || 'Failed to create group');
@@ -491,11 +540,8 @@ export default function ProfileScreen() {
               <TouchableOpacity 
                 style={styles.submitButton} 
                 onPress={handleCreateGroup}
-                disabled={createGroupMutation.isPending}
               >
-                <Text style={styles.submitButtonText}>
-                  {createGroupMutation.isPending ? 'Creating...' : 'Create'}
-                </Text>
+                <Text style={styles.submitButtonText}>Create</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -10,11 +10,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Trophy, Users, Calendar } from 'lucide-react-native';
-import { trpc } from '@/lib/trpc';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { useSession } from '@/hooks/use-session';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '@/lib/supabase';
 
 export default function CreateCompetitionScreen() {
   const router = useRouter();
@@ -23,7 +23,6 @@ export default function CreateCompetitionScreen() {
   const { groups } = useRealtimeGroups(user?.id);
   const { activeGroupId } = useGameStore();
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0];
-  const createCompetitionMutation = trpc.competitions.create.useMutation();
   
   const [name, setName] = useState('');
   const [type, setType] = useState<'league' | 'tournament' | 'friendly'>('league');
@@ -37,7 +36,7 @@ export default function CreateCompetitionScreen() {
   const [friendlyTarget, setFriendlyTarget] = useState('3');
   
   // Tournament options
-  const [tournamentType, setTournamentType] = useState<'knockout'>('knockout');
+  const tournamentType = 'knockout' as const;
 
   if (!activeGroup) {
     return (
@@ -98,28 +97,138 @@ export default function CreateCompetitionScreen() {
         participantIds: selectedPlayers,
       });
 
-      const result = await createCompetitionMutation.mutateAsync({
-        groupId: activeGroup.id,
-        name: name.trim(),
-        type,
-        participantIds: selectedPlayers,
-        leagueFormat: type === 'league' ? leagueFormat : undefined,
-        friendlyType: type === 'friendly' ? friendlyType : undefined,
-        friendlyTarget: type === 'friendly' ? parseInt(friendlyTarget) || 3 : undefined,
-        tournamentType: type === 'tournament' ? tournamentType : undefined,
-        knockoutMinPlayers: type === 'tournament' ? 4 : undefined,
-      });
+      const { data: competition, error: compError } = await supabase
+        .from('competitions')
+        .insert({
+          group_id: activeGroup.id,
+          name: name.trim(),
+          type: type,
+          status: 'upcoming',
+          start_date: new Date().toISOString(),
+          tournament_type: type === 'tournament' ? tournamentType : null,
+          league_format: type === 'league' ? leagueFormat : null,
+          friendly_type: type === 'friendly' ? friendlyType : null,
+          friendly_target: type === 'friendly' ? parseInt(friendlyTarget) || 3 : null,
+          knockout_min_players: type === 'tournament' ? 4 : null,
+        })
+        .select()
+        .single();
 
-      if (result.success) {
-        console.log('✅ Competition created successfully:', result.competition);
-        alert(`Competition "${result.competition.name}" created successfully!`);
-        router.back();
+      if (compError || !competition) {
+        console.error('Error creating competition:', compError);
+        alert('Failed to create competition');
+        return;
       }
+
+      const participantInserts = selectedPlayers.map(playerId => ({
+        competition_id: competition.id,
+        player_id: playerId,
+      }));
+
+      const { error: participantsError } = await supabase
+        .from('competition_participants')
+        .insert(participantInserts);
+
+      if (participantsError) {
+        console.error('Error adding participants:', participantsError);
+        await supabase.from('competitions').delete().eq('id', competition.id);
+        alert('Failed to add participants');
+        return;
+      }
+
+      const matches = generateMatches(
+        competition.id,
+        selectedPlayers,
+        type,
+        leagueFormat,
+        parseInt(friendlyTarget) || 3,
+        tournamentType
+      );
+
+      if (matches.length > 0) {
+        const { error: matchesError } = await supabase
+          .from('matches')
+          .insert(matches);
+
+        if (matchesError) {
+          console.error('Error creating matches:', matchesError);
+        }
+
+        await supabase
+          .from('competitions')
+          .update({ status: 'active' })
+          .eq('id', competition.id);
+      }
+
+      console.log('✅ Competition created successfully:', competition);
+      alert(`Competition "${competition.name}" created successfully!`);
+      router.back();
     } catch (error: any) {
       console.error('❌ Error creating competition:', error);
       alert(error?.message || 'Failed to create competition');
     }
   };
+
+  function generateMatches(
+    competitionId: string,
+    participantIds: string[],
+    type: 'league' | 'tournament' | 'friendly',
+    leagueFormat?: 'single' | 'double',
+    friendlyTarget?: number,
+    tournamentType?: 'knockout'
+  ) {
+    const matches: any[] = [];
+    const baseTime = Date.now();
+
+    if (type === 'league') {
+      for (let i = 0; i < participantIds.length; i++) {
+        for (let j = i + 1; j < participantIds.length; j++) {
+          matches.push({
+            competition_id: competitionId,
+            home_player_id: participantIds[i],
+            away_player_id: participantIds[j],
+            status: 'scheduled',
+            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+          });
+
+          if (leagueFormat === 'double') {
+            matches.push({
+              competition_id: competitionId,
+              home_player_id: participantIds[j],
+              away_player_id: participantIds[i],
+              status: 'scheduled',
+              scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+            });
+          }
+        }
+      }
+    } else if (type === 'friendly' && participantIds.length === 2) {
+      const matchCount = friendlyTarget || 1;
+      for (let i = 0; i < matchCount; i++) {
+        matches.push({
+          competition_id: competitionId,
+          home_player_id: participantIds[0],
+          away_player_id: participantIds[1],
+          status: 'scheduled',
+          scheduled_time: new Date(baseTime + i * 86400000).toISOString(),
+        });
+      }
+    } else if (type === 'tournament' && tournamentType === 'knockout') {
+      for (let i = 0; i < participantIds.length; i += 2) {
+        if (i + 1 < participantIds.length) {
+          matches.push({
+            competition_id: competitionId,
+            home_player_id: participantIds[i],
+            away_player_id: participantIds[i + 1],
+            status: 'scheduled',
+            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+          });
+        }
+      }
+    }
+
+    return matches;
+  }
 
   const togglePlayer = (playerId: string) => {
     setSelectedPlayers(prev => 
