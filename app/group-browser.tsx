@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -18,11 +18,11 @@ import {
   X
 } from 'lucide-react-native';
 import { useSession } from '@/hooks/use-session';
-import { trpc } from '@/lib/trpc';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { useGameStore } from '@/hooks/use-game-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '@/lib/supabase';
 
 export default function GroupBrowserScreen() {
   const router = useRouter();
@@ -31,18 +31,78 @@ export default function GroupBrowserScreen() {
   const { setActiveGroupId } = useGameStore();
   const { refetch: refetchUserGroups } = useRealtimeGroups(user?.id);
   
-  const publicGroupsQuery = trpc.groups.getPublic.useQuery(undefined, {
-    enabled: !!user,
-  });
-  const createGroupMutation = trpc.groups.create.useMutation();
-  const joinGroupMutation = trpc.groups.join.useMutation();
-  
   const [searchQuery, setSearchQuery] = useState('');
   const [joinModal, setJoinModal] = useState(false);
   const [createModal, setCreateModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
+  const [availableGroups, setAvailableGroups] = useState<any[]>([]);
+  const [isJoining, setIsJoining] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const fetchPublicGroups = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data: player } = await supabase
+        .from('players')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (!player) {
+        setAvailableGroups([]);
+        return;
+      }
+
+      const { data: groups, error } = await supabase
+        .from('groups')
+        .select('id, name, description, invite_code, is_public, created_at, admin_id')
+        .eq('is_public', true);
+
+      if (error) {
+        console.error('Error fetching groups:', error);
+        return;
+      }
+
+      const { data: userGroups } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('player_id', player.id);
+
+      const userGroupIds = new Set(userGroups?.map((g: any) => g.group_id) || []);
+      const filteredGroups = (groups || []).filter((g: any) => !userGroupIds.has(g.id));
+
+      const groupsWithCounts = await Promise.all(
+        filteredGroups.map(async (group: any) => {
+          const { count } = await supabase
+            .from('group_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('group_id', group.id);
+          
+          return {
+            id: group.id,
+            name: group.name,
+            description: group.description || '',
+            inviteCode: group.invite_code,
+            isPublic: group.is_public,
+            memberCount: count || 0,
+            createdAt: group.created_at,
+          };
+        })
+      );
+
+      setAvailableGroups(groupsWithCounts);
+    } catch (error) {
+      console.error('Error in fetchPublicGroups:', error);
+    }
+  }, [user]);
+
+  React.useEffect(() => {
+    if (user) {
+      fetchPublicGroups();
+    }
+  }, [user, fetchPublicGroups]);
 
   if (!user) {
     return (
@@ -62,7 +122,7 @@ export default function GroupBrowserScreen() {
     );
   }
 
-  const availableGroups = publicGroupsQuery.data || [];
+
   
   const filteredGroups = availableGroups.filter((group: any) =>
     group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -75,54 +135,161 @@ export default function GroupBrowserScreen() {
   };
 
   const confirmJoinGroup = async () => {
-    if (!selectedGroup) return;
+    if (!selectedGroup || !user) return;
 
+    setIsJoining(true);
     try {
-      const result = await joinGroupMutation.mutateAsync({
-        inviteCode: selectedGroup.inviteCode,
-      });
+      const { data: player } = await supabase
+        .from('players')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
 
-      if (result.success) {
+      if (!player) {
+        alert('Player not found');
+        return;
+      }
+
+      const { data: group, error: groupError } = await supabase
+        .from('groups')
+        .select('*')
+        .eq('invite_code', selectedGroup.inviteCode.toUpperCase())
+        .single();
+
+      if (groupError || !group) {
+        alert('Invalid invite code');
+        return;
+      }
+
+      const { data: existingMember } = await supabase
+        .from('group_members')
+        .select('id')
+        .eq('group_id', group.id)
+        .eq('player_id', player.id)
+        .maybeSingle();
+
+      if (existingMember) {
+        alert('You are already a member of this group');
         setJoinModal(false);
         setSelectedGroup(null);
-        console.log('✅ Successfully joined group:', result.group.name);
-        setActiveGroupId(result.group.id);
-        await refetchUserGroups();
-        await publicGroupsQuery.refetch();
-        router.back();
+        return;
       }
+
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .insert({
+          group_id: group.id,
+          player_id: player.id,
+          is_admin: false,
+        });
+
+      if (memberError) {
+        console.error('Error joining group:', memberError);
+        alert('Failed to join group');
+        return;
+      }
+
+      await supabase
+        .from('player_stats')
+        .insert({
+          player_id: player.id,
+          group_id: group.id,
+        });
+
+      setJoinModal(false);
+      setSelectedGroup(null);
+      console.log('✅ Successfully joined group:', group.name);
+      setActiveGroupId(group.id);
+      await refetchUserGroups();
+      await fetchPublicGroups();
+      router.back();
     } catch (error: any) {
       console.error('Error joining group:', error);
       alert(error?.message || 'Failed to join group');
+    } finally {
+      setIsJoining(false);
     }
   };
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
-      console.log('Please enter a group name');
+      alert('Please enter a group name');
       return;
     }
     
-    try {
-      const result = await createGroupMutation.mutateAsync({
-        name: groupName.trim(),
-        description: groupDescription.trim(),
-      });
+    if (!user) {
+      alert('User not authenticated');
+      return;
+    }
 
-      if (result.success) {
-        setCreateModal(false);
-        setGroupName('');
-        setGroupDescription('');
-        console.log('✅ Group created:', result.group.name);
-        alert(`Group created!\n\nInvite Code: ${result.group.inviteCode}`);
-        setActiveGroupId(result.group.id);
-        await refetchUserGroups();
-        await publicGroupsQuery.refetch();
-        router.back();
+    setIsCreating(true);
+    try {
+      const { data: player } = await supabase
+        .from('players')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (!player) {
+        alert('Player not found');
+        return;
       }
+
+      const inviteCode = Math.random().toString(36).substr(2, 8).toUpperCase();
+
+      const { data: group, error: groupError } = await supabase
+        .from('groups')
+        .insert({
+          name: groupName.trim(),
+          description: groupDescription.trim() || '',
+          admin_id: player.id,
+          invite_code: inviteCode,
+          is_public: true,
+        })
+        .select()
+        .single();
+
+      if (groupError || !group) {
+        console.error('Error creating group:', groupError);
+        alert('Failed to create group');
+        return;
+      }
+
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .insert({
+          group_id: group.id,
+          player_id: player.id,
+          is_admin: true,
+        });
+
+      if (memberError) {
+        console.error('Error adding member:', memberError);
+        alert('Failed to add member to group');
+        return;
+      }
+
+      await supabase
+        .from('player_stats')
+        .insert({
+          player_id: player.id,
+          group_id: group.id,
+        });
+
+      setCreateModal(false);
+      setGroupName('');
+      setGroupDescription('');
+      console.log('✅ Group created:', group.name);
+      alert(`Group created!\n\nInvite Code: ${group.invite_code}`);
+      setActiveGroupId(group.id);
+      await refetchUserGroups();
+      await fetchPublicGroups();
+      router.back();
     } catch (error: any) {
       console.error('Error creating group:', error);
       alert(error?.message || 'Failed to create group');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -270,10 +437,10 @@ export default function GroupBrowserScreen() {
                   <TouchableOpacity
                     style={styles.confirmButton}
                     onPress={confirmJoinGroup}
-                    disabled={joinGroupMutation.isPending}
+                    disabled={isJoining}
                   >
                     <Text style={styles.confirmButtonText}>
-                      {joinGroupMutation.isPending ? 'Joining...' : 'Join Group'}
+                      {isJoining ? 'Joining...' : 'Join Group'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -334,10 +501,10 @@ export default function GroupBrowserScreen() {
               <TouchableOpacity
                 style={styles.confirmButton}
                 onPress={handleCreateGroup}
-                disabled={createGroupMutation.isPending}
+                disabled={isCreating}
               >
                 <Text style={styles.confirmButtonText}>
-                  {createGroupMutation.isPending ? 'Creating...' : 'Create'}
+                  {isCreating ? 'Creating...' : 'Create'}
                 </Text>
               </TouchableOpacity>
             </View>

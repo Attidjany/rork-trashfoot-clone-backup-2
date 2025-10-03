@@ -29,7 +29,15 @@ export default function Index() {
   }, [backendTest.data, backendTest.error]);
 
   useEffect(() => {
-    if (hasRedirected.current || loading) {
+    if (loading) {
+      return;
+    }
+    
+    if (!user) {
+      hasRedirected.current = false;
+    }
+    
+    if (hasRedirected.current) {
       return;
     }
     

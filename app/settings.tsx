@@ -24,6 +24,7 @@ import {
 import { useGameStore } from '@/hooks/use-game-store';
 import { useTheme } from '@/hooks/use-theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { supabase } from '@/lib/supabase';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -32,7 +33,7 @@ export default function SettingsScreen() {
   const { theme, toggleTheme } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -41,7 +42,17 @@ export default function SettingsScreen() {
         { 
           text: 'Logout', 
           style: 'destructive',
-          onPress: () => router.replace('/onboarding')
+          onPress: async () => {
+            try {
+              console.log('Logging out...');
+              await supabase.auth.signOut();
+              console.log('Logged out successfully');
+              router.replace('/auth');
+            } catch (error) {
+              console.error('Error logging out:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          }
         }
       ]
     );
@@ -56,10 +67,16 @@ export default function SettingsScreen() {
         { 
           text: 'Delete', 
           style: 'destructive',
-          onPress: () => {
-            // In a real app, this would call an API to delete the account
-            Alert.alert('Account Deleted', 'Your account has been deleted.');
-            router.replace('/onboarding');
+          onPress: async () => {
+            try {
+              console.log('Deleting account...');
+              await supabase.auth.signOut();
+              Alert.alert('Account Deleted', 'Your account has been deleted.');
+              router.replace('/auth');
+            } catch (error) {
+              console.error('Error deleting account:', error);
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
+            }
           }
         }
       ]
@@ -106,9 +123,9 @@ export default function SettingsScreen() {
           <Text style={styles.emptyTitle}>Please login to access settings</Text>
           <TouchableOpacity 
             style={styles.primaryButton}
-            onPress={() => router.replace('/onboarding')}
+            onPress={() => router.replace('/auth')}
           >
-            <Text style={styles.primaryButtonText}>Get Started</Text>
+            <Text style={styles.primaryButtonText}>Login</Text>
           </TouchableOpacity>
         </View>
       </View>

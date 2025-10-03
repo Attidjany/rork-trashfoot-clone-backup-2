@@ -34,10 +34,10 @@ export default function AuthScreen() {
 
   useEffect(() => {
     if (!sessionLoading && user && !hasRedirected.current) {
-      console.log('Auth page: User already logged in, redirecting to index...');
+      console.log('Auth page: User already logged in, redirecting to home...');
       hasRedirected.current = true;
       setTimeout(() => {
-        router.replace('/');
+        router.replace('/(tabs)/home');
       }, 100);
     }
   }, [user, sessionLoading, router]);
