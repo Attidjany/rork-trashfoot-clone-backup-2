@@ -27,8 +27,17 @@ export default function MatchesScreen() {
   const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
   const { activeGroupId, shareYoutubeLink, deleteMatch, currentUser } = useGameStore();
   
-  const updateMatchMutation = trpc.matches.updateResult.useMutation();
-  const correctScoreMutation = trpc.matches.correctScore.useMutation();
+  const utils = trpc.useUtils();
+  const updateMatchMutation = trpc.matches.updateResult.useMutation({
+    onSuccess: () => {
+      utils.competitions.getGroupCompetitions.invalidate();
+    },
+  });
+  const correctScoreMutation = trpc.matches.correctScore.useMutation({
+    onSuccess: () => {
+      utils.competitions.getGroupCompetitions.invalidate();
+    },
+  });
   
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
   const isLoading = sessionLoading || groupsLoading;
@@ -67,23 +76,38 @@ export default function MatchesScreen() {
   const knockoutTournaments = activeGroup.competitions.filter(c => c.type === 'tournament' && c.tournamentType === 'knockout');
 
   const handleSubmitResult = async () => {
-    if (!selectedMatch || !homeScore || !awayScore) return;
+    if (!selectedMatch || homeScore === '' || awayScore === '') {
+      Alert.alert('Error', 'Please enter both scores');
+      return;
+    }
+    
+    const homeScoreNum = parseInt(homeScore);
+    const awayScoreNum = parseInt(awayScore);
+    
+    if (isNaN(homeScoreNum) || isNaN(awayScoreNum) || homeScoreNum < 0 || awayScoreNum < 0) {
+      Alert.alert('Error', 'Please enter valid scores');
+      return;
+    }
     
     try {
+      console.log('🎯 Submitting result:', { matchId: selectedMatch.id, homeScore: homeScoreNum, awayScore: awayScoreNum });
+      
       if (selectedMatch.status === 'completed') {
-        await correctScoreMutation.mutateAsync({
+        const result = await correctScoreMutation.mutateAsync({
           matchId: selectedMatch.id,
-          homeScore: parseInt(homeScore),
-          awayScore: parseInt(awayScore),
+          homeScore: homeScoreNum,
+          awayScore: awayScoreNum,
         });
-        console.log('Score corrected successfully');
+        console.log('✅ Score corrected successfully:', result);
+        Alert.alert('Success', 'Score corrected successfully');
       } else {
-        await updateMatchMutation.mutateAsync({
+        const result = await updateMatchMutation.mutateAsync({
           matchId: selectedMatch.id,
-          homeScore: parseInt(homeScore),
-          awayScore: parseInt(awayScore),
+          homeScore: homeScoreNum,
+          awayScore: awayScoreNum,
         });
-        console.log('Match result submitted successfully');
+        console.log('✅ Match result submitted successfully:', result);
+        Alert.alert('Success', 'Match result submitted successfully');
       }
       
       setResultModal(false);
@@ -91,7 +115,7 @@ export default function MatchesScreen() {
       setHomeScore('');
       setAwayScore('');
     } catch (error: any) {
-      console.error('Error submitting result:', error);
+      console.error('❌ Error submitting result:', error);
       Alert.alert('Error', error?.message || 'Failed to submit result');
     }
   };
