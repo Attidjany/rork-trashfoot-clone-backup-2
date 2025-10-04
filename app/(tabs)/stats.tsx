@@ -17,7 +17,7 @@ import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function StatsScreen() {
   const { user, loading: sessionLoading } = useSession();
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   const { activeGroupId, getHeadToHead } = useGameStore();
   
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;

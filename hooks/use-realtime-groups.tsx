@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, createContext, useContext, ReactNode, useMemo } from 'react';
 import { Group, Player, Match, PlayerStats } from '@/types/game';
 import { supabase } from '@/lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
@@ -58,7 +58,16 @@ function calculatePlayerStats(playerId: string, matches: Match[]): PlayerStats {
   };
 }
 
-export function useRealtimeGroups(userId: string | undefined) {
+interface RealtimeGroupsContextValue {
+  groups: Group[];
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+const RealtimeGroupsContext = createContext<RealtimeGroupsContextValue | null>(null);
+
+export function RealtimeGroupsProvider({ children, userId }: { children: ReactNode; userId: string | undefined }) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -271,6 +280,7 @@ export function useRealtimeGroups(userId: string | undefined) {
 
     if (!userId) return;
 
+    console.log('🔌 Setting up real-time subscriptions for session');
     const channels: RealtimeChannel[] = [];
 
     const matchesChannel = supabase
@@ -381,11 +391,29 @@ export function useRealtimeGroups(userId: string | undefined) {
     channels.push(matchesChannel, competitionsChannel, groupsChannel, groupMembersChannel, playersChannel);
 
     return () => {
+      console.log('🔌 Cleaning up real-time subscriptions for session');
       channels.forEach(channel => {
         supabase.removeChannel(channel);
       });
     };
   }, [fetchGroups, userId]);
 
-  return { groups, isLoading, error, refetch: fetchGroups };
+  const value = useMemo(
+    () => ({ groups, isLoading, error, refetch: fetchGroups }),
+    [groups, isLoading, error, fetchGroups]
+  );
+
+  return (
+    <RealtimeGroupsContext.Provider value={value}>
+      {children}
+    </RealtimeGroupsContext.Provider>
+  );
+}
+
+export function useRealtimeGroups() {
+  const context = useContext(RealtimeGroupsContext);
+  if (!context) {
+    throw new Error('useRealtimeGroups must be used within RealtimeGroupsProvider');
+  }
+  return context;
 }

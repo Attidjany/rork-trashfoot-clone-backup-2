@@ -48,7 +48,7 @@ export default function ProfileScreen() {
   const { user, loading } = useSession();
   const signedIn = !!user;
   
-  const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups(user?.id);
+  const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups();
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
 
   useEffect(() => {

@@ -25,7 +25,7 @@ export default function MatchesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, loading: sessionLoading } = useSession();
-  const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups(user?.id);
+  const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups();
   const { activeGroupId, shareYoutubeLink, currentUser } = useGameStore();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   

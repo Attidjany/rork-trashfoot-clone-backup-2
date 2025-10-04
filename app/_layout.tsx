@@ -7,6 +7,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { GameProvider } from "@/hooks/use-game-store";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { trpc, trpcClient } from "@/lib/trpc";
+import { RealtimeGroupsProvider } from "@/hooks/use-realtime-groups";
+import { useSession } from "@/hooks/use-session";
 
 import "react-native-url-polyfill/auto";
 
@@ -85,12 +87,24 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <GameProvider>
-            <GestureHandlerRootView style={styles.gestureHandler}>
-              <RootLayoutNav />
-            </GestureHandlerRootView>
+            <SessionRealtimeWrapper>
+              <GestureHandlerRootView style={styles.gestureHandler}>
+                <RootLayoutNav />
+              </GestureHandlerRootView>
+            </SessionRealtimeWrapper>
           </GameProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </trpc.Provider>
+  );
+}
+
+function SessionRealtimeWrapper({ children }: { children: React.ReactNode }) {
+  const { user } = useSession();
+  
+  return (
+    <RealtimeGroupsProvider userId={user?.id}>
+      {children}
+    </RealtimeGroupsProvider>
   );
 }

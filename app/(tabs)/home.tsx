@@ -28,7 +28,7 @@ export default function HomeScreen() {
     isHydrated,
   } = useGameStore();
   
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
   const isLoading = sessionLoading || groupsLoading || !isHydrated;
 
