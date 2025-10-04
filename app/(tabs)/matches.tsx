@@ -75,10 +75,33 @@ export default function MatchesScreen() {
   }
 
   const allMatches = activeGroup.competitions.flatMap(c => c.matches);
-  const upcomingMatches = allMatches.filter(m => m.status === 'scheduled');
-  const liveMatches = allMatches.filter(m => m.status === 'live');
+  
+  const sortMatchesByPlayerInvolvement = (matches: Match[]) => {
+    if (!currentPlayerId) return matches;
+    
+    return [...matches].sort((a, b) => {
+      const aIsPlayerMatch = a.homePlayerId === currentPlayerId || a.awayPlayerId === currentPlayerId;
+      const bIsPlayerMatch = b.homePlayerId === currentPlayerId || b.awayPlayerId === currentPlayerId;
+      
+      if (aIsPlayerMatch && !bIsPlayerMatch) return -1;
+      if (!aIsPlayerMatch && bIsPlayerMatch) return 1;
+      
+      return new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime();
+    });
+  };
+  
+  const upcomingMatches = sortMatchesByPlayerInvolvement(allMatches.filter(m => m.status === 'scheduled'));
+  const liveMatches = sortMatchesByPlayerInvolvement(allMatches.filter(m => m.status === 'live'));
   const completedMatches = allMatches.filter(m => m.status === 'completed')
-    .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime());
+    .sort((a, b) => {
+      const aIsPlayerMatch = a.homePlayerId === currentPlayerId || a.awayPlayerId === currentPlayerId;
+      const bIsPlayerMatch = b.homePlayerId === currentPlayerId || b.awayPlayerId === currentPlayerId;
+      
+      if (aIsPlayerMatch && !bIsPlayerMatch) return -1;
+      if (!aIsPlayerMatch && bIsPlayerMatch) return 1;
+      
+      return new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime();
+    });
   const knockoutTournaments = activeGroup.competitions.filter(c => c.type === 'tournament' && c.tournamentType === 'knockout');
 
   const handleSubmitResult = async () => {
@@ -337,30 +360,30 @@ export default function MatchesScreen() {
         {match.status === 'scheduled' && (
           <View style={styles.matchActions}>
             {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId) && (
-              <>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    setSelectedMatch(match);
-                    setYoutubeModal(true);
-                  }}
-                >
-                  <Youtube size={16} color="#0EA5E9" />
-                  <Text style={styles.actionText}>Go Live</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    setSelectedMatch(match);
-                    setResultModal(true);
-                  }}
-                >
-                  <CheckCircle size={16} color="#10B981" />
-                  <Text style={styles.actionText}>Add Result</Text>
-                </TouchableOpacity>
-              </>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setSelectedMatch(match);
+                  setYoutubeModal(true);
+                }}
+              >
+                <Youtube size={16} color="#0EA5E9" />
+                <Text style={styles.actionText}>Go Live</Text>
+              </TouchableOpacity>
+            )}
+            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId || activeGroup?.adminId === currentPlayerId) && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setSelectedMatch(match);
+                  setResultModal(true);
+                }}
+              >
+                <CheckCircle size={16} color="#10B981" />
+                <Text style={styles.actionText}>Add Result</Text>
+              </TouchableOpacity>
             )}
             {activeGroup?.adminId === currentPlayerId && (
               <TouchableOpacity
@@ -391,7 +414,7 @@ export default function MatchesScreen() {
                 <Text style={styles.actionText}>Watch</Text>
               </TouchableOpacity>
             )}
-            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId) && (
+            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId || activeGroup?.adminId === currentPlayerId) && (
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={(e) => {
