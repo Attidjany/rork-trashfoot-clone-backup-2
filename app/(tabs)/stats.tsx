@@ -44,7 +44,12 @@ export default function StatsScreen() {
       .filter(comp => comp.type === 'league')
       .map(league => {
         const leagueMatches = league.matches.filter(m => m.status === 'completed');
-        const leaguePlayerStats = activeGroup.members.map(player => {
+        
+        const leagueParticipants = activeGroup.members.filter(member => 
+          league.participants.includes(member.id)
+        );
+        
+        const leaguePlayerStats = leagueParticipants.map(player => {
           const playerMatches = leagueMatches.filter(
             m => m.homePlayerId === player.id || m.awayPlayerId === player.id
           );
@@ -91,12 +96,19 @@ export default function StatsScreen() {
               form: form.slice(0, 5),
             }
           };
-        }).filter(p => p.leagueStats.played > 0)
-          .sort((a, b) => b.leagueStats.points - a.leagueStats.points);
+        }).sort((a, b) => {
+          if (b.leagueStats.points !== a.leagueStats.points) {
+            return b.leagueStats.points - a.leagueStats.points;
+          }
+          const aGD = a.leagueStats.goalsFor - a.leagueStats.goalsAgainst;
+          const bGD = b.leagueStats.goalsFor - b.leagueStats.goalsAgainst;
+          return bGD - aGD;
+        });
         
         return {
           league,
           players: leaguePlayerStats,
+          totalParticipants: league.participants.length,
         };
       });
   }, [activeGroup, completedMatchesCount]);
@@ -398,10 +410,11 @@ export default function StatsScreen() {
                 <Text style={styles.emptyText}>Create a league competition to see league tables</Text>
               </View>
             ) : (
-              leagueStats.map(({ league, players }) => {
+              leagueStats.map(({ league, players, totalParticipants }) => {
                 const isExpanded = showFullTable[league.id] || false;
                 const displayPlayers = isExpanded ? players : players.slice(0, 3);
                 const isOngoing = league.status === 'active';
+                const hasMatches = players.length > 0;
                 
                 return (
                   <View key={league.id} style={styles.leagueCard}>
@@ -425,13 +438,13 @@ export default function StatsScreen() {
                           </View>
                         </View>
                         <Text style={styles.leagueSubtitle}>
-                          {players.length} players • {league.matches.filter(m => m.status === 'completed').length} matches played
+                          {players.length > 0 ? players.length : totalParticipants} participants • {league.matches.filter(m => m.status === 'completed').length}/{league.matches.length} matches played
                         </Text>
                       </View>
                     </LinearGradient>
                     
                     {/* Podium for top 3 */}
-                    {players.length >= 3 && (
+                    {hasMatches && players.length >= 3 && (
                       <View style={styles.miniPodiumContainer}>
                         <View style={styles.miniPodium}>
                           {/* Second Place */}
@@ -495,7 +508,8 @@ export default function StatsScreen() {
                     )}
                     
                     {/* League Table */}
-                    <View style={styles.leagueTable}>
+                    {hasMatches ? (
+                      <View style={styles.leagueTable}>
                       <View style={styles.tableHeader}>
                         <Text style={[styles.tableHeaderText, styles.positionColumn]}>#</Text>
                         <Text style={[styles.tableHeaderText, styles.playerColumn]}>Player</Text>
@@ -545,10 +559,20 @@ export default function StatsScreen() {
                           </View>
                         );
                       })}
-                    </View>
+                      </View>
+                    ) : (
+                      <View style={styles.noMatchesContainer}>
+                        <Text style={styles.noMatchesText}>
+                          No matches played yet in this league
+                        </Text>
+                        <Text style={styles.noMatchesSubtext}>
+                          {totalParticipants} participants • {league.matches.length} matches scheduled
+                        </Text>
+                      </View>
+                    )}
                     
                     {/* Expand/Collapse Button */}
-                    {players.length > 3 && (
+                    {hasMatches && players.length > 3 && (
                       <TouchableOpacity
                         style={styles.expandButton}
                         onPress={() => setShowFullTable(prev => ({
@@ -1121,5 +1145,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0EA5E9',
     fontWeight: '500' as const,
+  },
+  noMatchesContainer: {
+    padding: 32,
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+  },
+  noMatchesText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  noMatchesSubtext: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
   },
 });
