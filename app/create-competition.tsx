@@ -29,6 +29,7 @@ export default function CreateCompetitionScreen() {
   const [name, setName] = useState('');
   const [type, setType] = useState<'league' | 'tournament' | 'friendly'>('league');
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
+  const [deadlineDays, setDeadlineDays] = useState('7');
   
   // League options
   const [leagueFormat, setLeagueFormat] = useState<'single' | 'double'>('single');
@@ -136,6 +137,7 @@ export default function CreateCompetitionScreen() {
           friendly_type: type === 'friendly' ? friendlyType : null,
           friendly_target: type === 'friendly' ? parseInt(friendlyTarget) || 3 : null,
           knockout_min_players: type === 'tournament' ? 4 : null,
+          deadline_days: parseInt(deadlineDays) || null,
         })
         .select()
         .single();
@@ -389,6 +391,24 @@ export default function CreateCompetitionScreen() {
             </View>
           </View>
         )}
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Competition Deadline (Days)</Text>
+          <TextInput
+            style={styles.input}
+            value={deadlineDays}
+            onChangeText={setDeadlineDays}
+            placeholder="7"
+            placeholderTextColor="#64748B"
+            keyboardType="numeric"
+            maxLength={3}
+          />
+          <View style={[styles.infoBox, { marginTop: 8 }]}>
+            <Text style={styles.infoText}>
+              ⏰ After {deadlineDays || '0'} days, all unplayed matches will be automatically deleted and the competition will be marked as completed.
+            </Text>
+          </View>
+        </View>
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>

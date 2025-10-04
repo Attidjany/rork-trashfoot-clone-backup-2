@@ -65,6 +65,7 @@ export interface Competition {
   minParticipants?: number;
   rounds?: TournamentRound[];
   bracket?: KnockoutBracket;
+  deadlineDays?: number;
   // League specific
   leagueFormat?: 'single' | 'double'; // single = one match per pair, double = home/away
   // Friendly specific

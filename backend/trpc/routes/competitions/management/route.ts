@@ -14,6 +14,7 @@ export const createCompetitionProcedure = protectedProcedure
       friendlyTarget: z.number().optional(),
       tournamentType: z.enum(['knockout', 'group_stage', 'mixed']).optional(),
       knockoutMinPlayers: z.number().optional(),
+      deadlineDays: z.number().optional(),
     })
   )
   .mutation(async ({ input, ctx }) => {
@@ -56,6 +57,7 @@ export const createCompetitionProcedure = protectedProcedure
         friendly_type: input.friendlyType,
         friendly_target: input.friendlyTarget,
         knockout_min_players: input.knockoutMinPlayers,
+        deadline_days: input.deadlineDays,
       })
       .select()
       .single();
