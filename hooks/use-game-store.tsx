@@ -94,6 +94,83 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
     loadActiveGroupId();
   }, []);
 
+  useEffect(() => {
+    if (!activeGroupId) {
+      setMessages([]);
+      return;
+    }
+
+    console.log('💬 Setting up chat realtime subscription for group:', activeGroupId);
+
+    const loadMessages = async () => {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('group_id', activeGroupId)
+        .order('timestamp', { ascending: true });
+
+      if (error) {
+        console.error('Error loading messages:', error);
+        return;
+      }
+
+      if (data) {
+        const chatMessages: ChatMessage[] = data.map(msg => ({
+          id: msg.id,
+          groupId: msg.group_id,
+          senderId: msg.sender_id,
+          senderName: msg.sender_name,
+          message: msg.message,
+          timestamp: msg.timestamp,
+          type: msg.type as 'text' | 'match_result' | 'youtube_link',
+          metadata: msg.metadata || undefined,
+        }));
+        console.log('📥 Loaded', chatMessages.length, 'messages');
+        setMessages(chatMessages);
+      }
+    };
+
+    loadMessages();
+
+    const channel = supabase
+      .channel(`chat:${activeGroupId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `group_id=eq.${activeGroupId}`,
+        },
+        (payload) => {
+          console.log('💬 New message received:', payload.new);
+          const newMsg = payload.new as any;
+          const chatMessage: ChatMessage = {
+            id: newMsg.id,
+            groupId: newMsg.group_id,
+            senderId: newMsg.sender_id,
+            senderName: newMsg.sender_name,
+            message: newMsg.message,
+            timestamp: newMsg.timestamp,
+            type: newMsg.type as 'text' | 'match_result' | 'youtube_link',
+            metadata: newMsg.metadata || undefined,
+          };
+          setMessages(prev => {
+            if (prev.some(m => m.id === chatMessage.id)) {
+              return prev;
+            }
+            return [...prev, chatMessage];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('💬 Cleaning up chat subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [activeGroupId]);
+
   const persistActiveGroupId = useCallback(async (groupId: string | null) => {
     try {
       if (groupId) {
@@ -386,19 +463,8 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
         return;
       }
       
-      const newMessage: ChatMessage = {
-        id: chatMessage.id,
-        groupId: chatMessage.group_id,
-        senderId: chatMessage.sender_id,
-        senderName: chatMessage.sender_name,
-        message: chatMessage.message,
-        timestamp: chatMessage.timestamp,
-        type: chatMessage.type as 'text' | 'match_result' | 'youtube_link',
-        metadata: chatMessage.metadata || undefined,
-      };
-
-      setMessages(prev => [...prev, newMessage]);
-      return newMessage;
+      console.log('✅ Message sent successfully');
+      return chatMessage;
     } catch (error) {
       console.error('Error sending message:', error);
     }
@@ -667,16 +733,19 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
   const logout = useCallback(async () => {
     console.log('🔓 Logging out user...');
     try {
+      console.log('🔄 Clearing local state...');
       setCurrentUser(null);
       setGroups([]);
       setActiveGroupId(null);
       setMessages([]);
+      
+      console.log('🔄 Removing persisted active group...');
       await persistActiveGroupId(null);
       
-      const { error } = await supabase.auth.signOut();
+      console.log('🔄 Signing out from Supabase...');
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
       if (error) {
         console.error('❌ Supabase signOut error:', error);
-        throw error;
       }
       
       console.log('✅ Logout successful - state cleared');

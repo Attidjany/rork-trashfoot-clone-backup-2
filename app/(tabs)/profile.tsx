@@ -331,23 +331,15 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('🔓 Logging out...');
-              
-              const { error } = await supabase.auth.signOut();
-              if (error) {
-                console.error('❌ Supabase signOut error:', error);
-                throw error;
-              }
+              console.log('🔓 Starting logout process...');
               
               await logoutFromStore();
               console.log('✅ Logged out successfully');
               
-              setTimeout(() => {
-                router.replace('/auth');
-              }, 100);
+              router.replace('/auth');
             } catch (e: any) {
               console.error('❌ Logout error:', e);
-              Alert.alert('Logout error', e?.message ?? String(e));
+              Alert.alert('Logout Error', e?.message ?? 'Failed to logout. Please try again.');
             }
           },
         },
