@@ -120,6 +120,45 @@ export default function MatchesScreen() {
     }
   };
 
+  const handleDeleteMatch = async (matchId: string) => {
+    Alert.alert(
+      'Delete Match',
+      'Are you sure you want to delete this match?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🔄 Deleting match from database:', matchId);
+              const { error } = await supabase
+                .from('matches')
+                .delete()
+                .eq('id', matchId);
+              
+              if (error) {
+                console.error('❌ Error deleting match:', error);
+                Alert.alert('Error', 'Failed to delete match');
+                return;
+              }
+              
+              console.log('✅ Match deleted successfully');
+              Alert.alert('Success', 'Match deleted successfully');
+              await refetchGroups();
+            } catch (error: any) {
+              console.error('❌ Error deleting match:', error);
+              Alert.alert('Error', error?.message || 'Failed to delete match');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleShareYoutube = () => {
     if (!selectedMatch) return;
     
@@ -282,46 +321,10 @@ export default function MatchesScreen() {
               match.awayPlayerId === currentUser?.id) && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.deleteButton]}
-                onPress={async (e) => {
+                onPress={(e) => {
                   e.stopPropagation();
                   console.log('🗑️ Delete button pressed for match:', match.id);
-                  
-                  Alert.alert(
-                    'Delete Match',
-                    'Are you sure you want to delete this match?',
-                    [
-                      {
-                        text: 'Cancel',
-                        style: 'cancel',
-                      },
-                      {
-                        text: 'Delete',
-                        style: 'destructive',
-                        onPress: async () => {
-                          try {
-                            console.log('🔄 Deleting match from database:', match.id);
-                            const { error } = await supabase
-                              .from('matches')
-                              .delete()
-                              .eq('id', match.id);
-                            
-                            if (error) {
-                              console.error('❌ Error deleting match:', error);
-                              Alert.alert('Error', 'Failed to delete match');
-                              return;
-                            }
-                            
-                            console.log('✅ Match deleted successfully');
-                            Alert.alert('Success', 'Match deleted successfully');
-                            await refetchGroups();
-                          } catch (error: any) {
-                            console.error('❌ Error deleting match:', error);
-                            Alert.alert('Error', error?.message || 'Failed to delete match');
-                          }
-                        },
-                      },
-                    ]
-                  );
+                  handleDeleteMatch(match.id);
                 }}
               >
                 <Text style={styles.actionText}>Delete</Text>

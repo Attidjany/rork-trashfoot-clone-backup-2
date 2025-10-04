@@ -320,7 +320,8 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    console.log('🔴 handleLogout called');
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -328,6 +329,7 @@ export default function ProfileScreen() {
         {
           text: 'Cancel',
           style: 'cancel',
+          onPress: () => console.log('🔴 Logout cancelled'),
         },
         {
           text: 'Logout',
