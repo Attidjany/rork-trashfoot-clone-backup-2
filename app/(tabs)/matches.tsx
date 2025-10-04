@@ -26,11 +26,27 @@ export default function MatchesScreen() {
   const insets = useSafeAreaInsets();
   const { user, loading: sessionLoading } = useSession();
   const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups();
-  const { activeGroupId, shareYoutubeLink, currentUser } = useGameStore();
+  const { activeGroupId, shareYoutubeLink } = useGameStore();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [currentPlayerId, setCurrentPlayerId] = React.useState<string | null>(null);
   
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
   const isLoading = sessionLoading || groupsLoading;
+
+  React.useEffect(() => {
+    const fetchCurrentPlayerId = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('players')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+      if (data) {
+        setCurrentPlayerId(data.id);
+      }
+    };
+    fetchCurrentPlayerId();
+  }, [user?.id]);
   const [selectedTab, setSelectedTab] = useState<'upcoming' | 'live' | 'completed' | 'tournaments'>('upcoming');
   const [resultModal, setResultModal] = useState(false);
   const [youtubeModal, setYoutubeModal] = useState(false);
@@ -79,6 +95,20 @@ export default function MatchesScreen() {
       return;
     }
     
+    if (!currentPlayerId) {
+      Alert.alert('Error', 'Player not found');
+      return;
+    }
+    
+    const isGroupAdmin = activeGroup?.adminId === currentPlayerId;
+    const isHomePlayer = selectedMatch.homePlayerId === currentPlayerId;
+    const isAwayPlayer = selectedMatch.awayPlayerId === currentPlayerId;
+    
+    if (!isGroupAdmin && !isHomePlayer && !isAwayPlayer) {
+      Alert.alert('Error', 'Only the two players involved in the match or the group admin can submit results');
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -122,6 +152,17 @@ export default function MatchesScreen() {
   };
 
   const handleDeleteMatch = async (matchId: string) => {
+    if (!currentPlayerId) {
+      Alert.alert('Error', 'Player not found');
+      return;
+    }
+
+    const isGroupAdmin = activeGroup?.adminId === currentPlayerId;
+    if (!isGroupAdmin) {
+      Alert.alert('Error', 'Only group admins can delete matches');
+      return;
+    }
+
     Alert.alert(
       'Delete Match',
       'Are you sure you want to delete this match?',
@@ -295,31 +336,33 @@ export default function MatchesScreen() {
 
         {match.status === 'scheduled' && (
           <View style={styles.matchActions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                setSelectedMatch(match);
-                setYoutubeModal(true);
-              }}
-            >
-              <Youtube size={16} color="#0EA5E9" />
-              <Text style={styles.actionText}>Go Live</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                setSelectedMatch(match);
-                setResultModal(true);
-              }}
-            >
-              <CheckCircle size={16} color="#10B981" />
-              <Text style={styles.actionText}>Add Result</Text>
-            </TouchableOpacity>
-            {((activeGroup?.adminIds && activeGroup.adminIds.includes(currentUser?.id || '')) || 
-              match.homePlayerId === currentUser?.id || 
-              match.awayPlayerId === currentUser?.id) && (
+            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId) && (
+              <>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setSelectedMatch(match);
+                    setYoutubeModal(true);
+                  }}
+                >
+                  <Youtube size={16} color="#0EA5E9" />
+                  <Text style={styles.actionText}>Go Live</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setSelectedMatch(match);
+                    setResultModal(true);
+                  }}
+                >
+                  <CheckCircle size={16} color="#10B981" />
+                  <Text style={styles.actionText}>Add Result</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {activeGroup?.adminId === currentPlayerId && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.deleteButton]}
                 onPress={(e) => {
@@ -348,21 +391,23 @@ export default function MatchesScreen() {
                 <Text style={styles.actionText}>Watch</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                setSelectedMatch(match);
-                setResultModal(true);
-              }}
-            >
-              <CheckCircle size={16} color="#10B981" />
-              <Text style={styles.actionText}>End Match</Text>
-            </TouchableOpacity>
+            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId) && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setSelectedMatch(match);
+                  setResultModal(true);
+                }}
+              >
+                <CheckCircle size={16} color="#10B981" />
+                <Text style={styles.actionText}>End Match</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
         
-        {match.status === 'completed' && activeGroup?.adminIds && activeGroup.adminIds.includes(currentUser?.id || '') && (
+        {match.status === 'completed' && activeGroup?.adminId === currentPlayerId && (
           <View style={styles.matchActions}>
             <TouchableOpacity
               style={styles.actionButton}

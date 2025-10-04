@@ -20,9 +20,19 @@ export const updateMatchResultProcedure = protectedProcedure
 
       const supabase = supabaseAdmin;
 
+      const { data: player } = await supabase
+        .from("players")
+        .select("id")
+        .eq("auth_user_id", ctx.user.id)
+        .single();
+
+      if (!player) {
+        throw new Error("Player not found");
+      }
+
       const { data: match, error: matchError } = await supabase
         .from("matches")
-        .select("*")
+        .select("*, competitions!inner(group_id, groups!inner(admin_id))")
         .eq("id", input.matchId)
         .single();
 
@@ -31,14 +41,28 @@ export const updateMatchResultProcedure = protectedProcedure
         throw new Error("Match not found");
       }
 
+      const groupAdminId = (match.competitions as any).groups.admin_id;
+      const isGroupAdmin = groupAdminId === player.id;
+      const isHomePlayer = match.home_player_id === player.id;
+      const isAwayPlayer = match.away_player_id === player.id;
+
+      if (!isGroupAdmin && !isHomePlayer && !isAwayPlayer) {
+        throw new Error("Only the two players involved in the match or the group admin can submit results");
+      }
+
+      const updateData: any = {
+        home_score: input.homeScore,
+        away_score: input.awayScore,
+      };
+
+      if (match.status !== "completed") {
+        updateData.status = "completed";
+        updateData.completed_at = new Date().toISOString();
+      }
+
       const { data: updatedMatch, error: updateError } = await supabase
         .from("matches")
-        .update({
-          home_score: input.homeScore,
-          away_score: input.awayScore,
-          status: "completed",
-          completed_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq("id", input.matchId)
         .select()
         .single();

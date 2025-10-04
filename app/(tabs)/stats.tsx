@@ -44,6 +44,7 @@ export default function StatsScreen() {
       .filter(comp => comp.type === 'league')
       .map(league => {
         const leagueMatches = league.matches.filter(m => m.status === 'completed');
+        const hasCompletedMatches = leagueMatches.length > 0;
         
         const leagueParticipants = activeGroup.members.filter(member => 
           league.participants.includes(member.id)
@@ -97,6 +98,9 @@ export default function StatsScreen() {
             }
           };
         }).sort((a, b) => {
+          if (!hasCompletedMatches) {
+            return a.gamerHandle.localeCompare(b.gamerHandle);
+          }
           if (b.leagueStats.points !== a.leagueStats.points) {
             return b.leagueStats.points - a.leagueStats.points;
           }
@@ -109,6 +113,7 @@ export default function StatsScreen() {
           league,
           players: leaguePlayerStats,
           totalParticipants: league.participants.length,
+          hasCompletedMatches,
         };
       });
   }, [activeGroup, completedMatchesCount]);
@@ -410,7 +415,7 @@ export default function StatsScreen() {
                 <Text style={styles.emptyText}>Create a league competition to see league tables</Text>
               </View>
             ) : (
-              leagueStats.map(({ league, players, totalParticipants }) => {
+              leagueStats.map(({ league, players, totalParticipants, hasCompletedMatches }) => {
                 const isExpanded = showFullTable[league.id] || false;
                 const displayPlayers = isExpanded ? players : players.slice(0, 3);
                 const isOngoing = league.status === 'active';
@@ -444,7 +449,7 @@ export default function StatsScreen() {
                     </LinearGradient>
                     
                     {/* Podium for top 3 */}
-                    {hasMatches && players.length >= 3 && (
+                    {hasCompletedMatches && hasMatches && players.length >= 3 && (
                       <View style={styles.miniPodiumContainer}>
                         <View style={styles.miniPodium}>
                           {/* Second Place */}

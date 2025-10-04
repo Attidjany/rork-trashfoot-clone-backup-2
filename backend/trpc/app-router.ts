@@ -10,6 +10,7 @@ import { getPublicGroupsProcedure, requestJoinGroupProcedure, manageGroupMemberP
 import { createCompetitionProcedure, getGroupCompetitionsProcedure } from "./routes/competitions/management/route";
 import { updateMatchResultProcedure } from "./routes/matches/update-result/route";
 import { correctMatchScoreProcedure } from "./routes/matches/correct-score/route";
+import { deleteMatchProcedure } from "./routes/matches/delete/route";
 import { getAllAccountsProcedure, deleteAccountProcedure, getAccountStatsProcedure, bulkDeleteAccountsProcedure } from "./routes/admin/accounts/route";
 
 export const appRouter = createTRPCRouter({
@@ -46,6 +47,7 @@ export const appRouter = createTRPCRouter({
   matches: createTRPCRouter({
     updateResult: updateMatchResultProcedure,
     correctScore: correctMatchScoreProcedure,
+    delete: deleteMatchProcedure,
   }),
 });
 
