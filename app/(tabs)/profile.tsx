@@ -521,7 +521,13 @@ export default function ProfileScreen() {
           <ChevronRight size={20} color="#64748B" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={() => {
+            console.log('🔴 Logout button pressed');
+            handleLogout();
+          }}
+        >
           <LogOut size={20} color="#EF4444" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>

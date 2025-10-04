@@ -25,7 +25,7 @@ export default function MatchesScreen() {
   const insets = useSafeAreaInsets();
   const { user, loading: sessionLoading } = useSession();
   const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups(user?.id);
-  const { activeGroupId, shareYoutubeLink, deleteMatch, currentUser } = useGameStore();
+  const { activeGroupId, shareYoutubeLink, currentUser } = useGameStore();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
@@ -282,11 +282,46 @@ export default function MatchesScreen() {
               match.awayPlayerId === currentUser?.id) && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.deleteButton]}
-                onPress={(e) => {
+                onPress={async (e) => {
                   e.stopPropagation();
-                  if (deleteMatch(match.id)) {
-                    console.log('Match deleted successfully');
-                  }
+                  console.log('🗑️ Delete button pressed for match:', match.id);
+                  
+                  Alert.alert(
+                    'Delete Match',
+                    'Are you sure you want to delete this match?',
+                    [
+                      {
+                        text: 'Cancel',
+                        style: 'cancel',
+                      },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            console.log('🔄 Deleting match from database:', match.id);
+                            const { error } = await supabase
+                              .from('matches')
+                              .delete()
+                              .eq('id', match.id);
+                            
+                            if (error) {
+                              console.error('❌ Error deleting match:', error);
+                              Alert.alert('Error', 'Failed to delete match');
+                              return;
+                            }
+                            
+                            console.log('✅ Match deleted successfully');
+                            Alert.alert('Success', 'Match deleted successfully');
+                            await refetchGroups();
+                          } catch (error: any) {
+                            console.error('❌ Error deleting match:', error);
+                            Alert.alert('Error', error?.message || 'Failed to delete match');
+                          }
+                        },
+                      },
+                    ]
+                  );
                 }}
               >
                 <Text style={styles.actionText}>Delete</Text>
