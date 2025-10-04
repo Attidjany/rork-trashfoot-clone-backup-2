@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { 
@@ -21,8 +22,14 @@ import {
   Play,
   Clock,
   CheckCircle,
-  User
+  User,
+  Calendar
 } from 'lucide-react-native';
+
+let DateTimePicker: any = null;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
 import { useSession } from '@/hooks/use-session';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -58,6 +65,13 @@ export default function GroupDetailsScreen() {
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const [newHomeScore, setNewHomeScore] = useState('');
   const [newAwayScore, setNewAwayScore] = useState('');
+  const [deadlineDate, setDeadlineDate] = useState<Date>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 7);
+    date.setHours(23, 59, 59, 999);
+    return date;
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
@@ -172,6 +186,7 @@ export default function GroupDetailsScreen() {
           friendly_type: compType === 'friendly' ? friendlyType : null,
           friendly_target: compType === 'friendly' ? parseInt(friendlyTarget) || 3 : null,
           knockout_min_players: compType === 'tournament' ? 4 : null,
+          end_date: deadlineDate.toISOString(),
         })
         .select()
         .single();
@@ -204,7 +219,8 @@ export default function GroupDetailsScreen() {
         compType,
         leagueFormat,
         parseInt(friendlyTarget) || 3,
-        tournamentType
+        tournamentType,
+        deadlineDate
       );
 
       if (matches.length > 0) {
@@ -230,6 +246,10 @@ export default function GroupDetailsScreen() {
       setFriendlyType('best_of');
       setFriendlyTarget('3');
       setTournamentType('knockout');
+      const newDate = new Date();
+      newDate.setDate(newDate.getDate() + 7);
+      newDate.setHours(23, 59, 59, 999);
+      setDeadlineDate(newDate);
     } catch (error: any) {
       console.error('Error creating competition:', error);
       alert(error?.message || 'Failed to create competition');
@@ -242,10 +262,11 @@ export default function GroupDetailsScreen() {
     type: 'league' | 'tournament' | 'friendly',
     leagueFormat?: 'single' | 'double',
     friendlyTarget?: number,
-    tournamentType?: 'knockout'
+    tournamentType?: 'knockout',
+    deadline?: Date
   ) {
     const matches: any[] = [];
-    const baseTime = Date.now();
+    const scheduledTime = deadline ? deadline.toISOString() : new Date(Date.now() + 7 * 86400000).toISOString();
 
     if (type === 'league') {
       for (let i = 0; i < participantIds.length; i++) {
@@ -255,7 +276,7 @@ export default function GroupDetailsScreen() {
             home_player_id: participantIds[i],
             away_player_id: participantIds[j],
             status: 'scheduled',
-            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+            scheduled_time: scheduledTime,
           });
 
           if (leagueFormat === 'double') {
@@ -264,7 +285,7 @@ export default function GroupDetailsScreen() {
               home_player_id: participantIds[j],
               away_player_id: participantIds[i],
               status: 'scheduled',
-              scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+              scheduled_time: scheduledTime,
             });
           }
         }
@@ -277,7 +298,7 @@ export default function GroupDetailsScreen() {
           home_player_id: participantIds[0],
           away_player_id: participantIds[1],
           status: 'scheduled',
-          scheduled_time: new Date(baseTime + i * 86400000).toISOString(),
+          scheduled_time: scheduledTime,
         });
       }
     } else if (type === 'tournament' && tournamentType === 'knockout') {
@@ -288,7 +309,7 @@ export default function GroupDetailsScreen() {
             home_player_id: participantIds[i],
             away_player_id: participantIds[i + 1],
             status: 'scheduled',
-            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+            scheduled_time: scheduledTime,
           });
         }
       }
@@ -726,6 +747,64 @@ export default function GroupDetailsScreen() {
               </View>
             )}
             
+            {/* Deadline Date Picker */}
+            <View style={styles.optionGroup}>
+              <Text style={styles.optionTitle}>Competition Deadline</Text>
+              {Platform.OS === 'web' ? (
+                <TextInput
+                  style={styles.input}
+                  value={deadlineDate.toISOString().split('T')[0]}
+                  onChangeText={(text) => {
+                    const newDate = new Date(text);
+                    if (!isNaN(newDate.getTime())) {
+                      newDate.setHours(23, 59, 59, 999);
+                      setDeadlineDate(newDate);
+                    }
+                  }}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#64748B"
+                />
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.dateButton}
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <Calendar size={20} color="#0EA5E9" />
+                    <Text style={styles.dateButtonText}>
+                      {deadlineDate.toLocaleDateString('en-US', { 
+                        weekday: 'short',
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                  {showDatePicker && DateTimePicker && (
+                    <DateTimePicker
+                      value={deadlineDate}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      minimumDate={new Date()}
+                      onChange={(event: any, selectedDate: Date | undefined) => {
+                        setShowDatePicker(Platform.OS === 'ios');
+                        if (selectedDate) {
+                          const newDate = new Date(selectedDate);
+                          newDate.setHours(23, 59, 59, 999);
+                          setDeadlineDate(newDate);
+                        }
+                      }}
+                    />
+                  )}
+                </>
+              )}
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  ⏰ All matches must be played before this deadline. After the deadline, unplayed matches will be automatically deleted.
+                </Text>
+              </View>
+            </View>
+            
             {/* Match count preview */}
             {selectedParticipants.length >= 2 && (
               <View style={styles.infoBox}>
@@ -782,6 +861,10 @@ export default function GroupDetailsScreen() {
                   setFriendlyType('best_of');
                   setFriendlyTarget('3');
                   setTournamentType('knockout');
+                  const newDate = new Date();
+                  newDate.setDate(newDate.getDate() + 7);
+                  newDate.setHours(23, 59, 59, 999);
+                  setDeadlineDate(newDate);
                 }}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -1357,5 +1440,18 @@ const styles = StyleSheet.create({
   scoreSeparator: {
     fontSize: 20,
     color: '#64748B',
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#0F172A',
+    padding: 16,
+    borderRadius: 12,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: '#fff',
+    flex: 1,
   },
 });
