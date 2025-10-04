@@ -381,7 +381,6 @@ export function useRealtimeGroups(userId: string | undefined) {
     channels.push(matchesChannel, competitionsChannel, groupsChannel, groupMembersChannel, playersChannel);
 
     return () => {
-      console.log('🔌 Unsubscribing from real-time channels');
       channels.forEach(channel => {
         supabase.removeChannel(channel);
       });
