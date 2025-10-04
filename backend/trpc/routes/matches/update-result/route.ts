@@ -53,6 +53,35 @@ export const updateMatchResultProcedure = protectedProcedure
       }
 
       console.log("✅ Match result updated successfully");
+      
+      // Check if it's a draw in a knockout tournament and create rematch
+      if (input.homeScore === input.awayScore) {
+        const { data: competition } = await supabase
+          .from('competitions')
+          .select('type, tournament_type')
+          .eq('id', match.competition_id)
+          .single();
+        
+        if (competition && competition.type === 'tournament' && competition.tournament_type === 'knockout') {
+          console.log('🔄 Draw detected in knockout tournament, creating rematch...');
+          
+          const { error: rematchError } = await supabase
+            .from('matches')
+            .insert({
+              competition_id: match.competition_id,
+              home_player_id: match.home_player_id,
+              away_player_id: match.away_player_id,
+              status: 'scheduled',
+              scheduled_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            });
+          
+          if (rematchError) {
+            console.error('❌ Error creating rematch:', rematchError);
+          } else {
+            console.log('✅ Rematch created successfully');
+          }
+        }
+      }
 
       return {
         success: true,

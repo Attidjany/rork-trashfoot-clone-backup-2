@@ -48,7 +48,7 @@ export default function ProfileScreen() {
   const { user, loading } = useSession();
   const signedIn = !!user;
   
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups(user?.id);
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
 
   useEffect(() => {
@@ -304,6 +304,9 @@ export default function ProfileScreen() {
           setLoggedInUser(updatedPlayer);
         }
         
+        console.log('🔄 Refetching groups to get updated player data...');
+        await refetchGroups();
+        
         Alert.alert('Success', 'Profile updated successfully!');
         setEditProfileModal(false);
         setEditName('');
@@ -336,7 +339,9 @@ export default function ProfileScreen() {
               await logoutFromStore();
               console.log('✅ Logged out successfully');
               
-              router.replace('/auth');
+              setTimeout(() => {
+                router.replace('/auth');
+              }, 100);
             } catch (e: any) {
               console.error('❌ Logout error:', e);
               Alert.alert('Logout Error', e?.message ?? 'Failed to logout. Please try again.');

@@ -12,7 +12,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { ArrowLeft, Trophy, Users, Calendar, CheckCircle, Youtube } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
+import { useSession } from '@/hooks/use-session';
 import { Match, Competition, Player } from '@/types/game';
+import { supabase } from '@/lib/supabase';
 
 interface BracketMatch {
   id: string;
@@ -28,7 +31,11 @@ export default function TournamentBracketScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
-  const { activeGroup, updateMatchResult, shareYoutubeLink, currentUser } = useGameStore();
+  const { user } = useSession();
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { activeGroupId } = useGameStore();
+  
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
   
   const [resultModal, setResultModal] = useState(false);
   const [youtubeModal, setYoutubeModal] = useState(false);
@@ -126,32 +133,68 @@ export default function TournamentBracketScreen() {
     return { brackets, totalRounds, participants };
   }, [tournament, activeGroup]);
 
-  const handleSubmitResult = () => {
-    if (!selectedMatch || !homeScore || !awayScore) return;
+  const handleSubmitResult = async () => {
+    if (!selectedMatch || homeScore === '' || awayScore === '') return;
     
-    updateMatchResult(selectedMatch.id, parseInt(homeScore), parseInt(awayScore));
+    const homeScoreNum = parseInt(homeScore);
+    const awayScoreNum = parseInt(awayScore);
     
-    setResultModal(false);
-    setSelectedMatch(null);
-    setHomeScore('');
-    setAwayScore('');
-  };
-
-  const handleShareYoutube = () => {
-    if (!selectedMatch) return;
-    
-    if (goLiveWithoutLink) {
-      shareYoutubeLink(selectedMatch.id, '');
-    } else if (youtubeLink) {
-      shareYoutubeLink(selectedMatch.id, youtubeLink);
-    } else {
+    if (isNaN(homeScoreNum) || isNaN(awayScoreNum) || homeScoreNum < 0 || awayScoreNum < 0) {
       return;
     }
     
-    setYoutubeModal(false);
-    setSelectedMatch(null);
-    setYoutubeLink('');
-    setGoLiveWithoutLink(false);
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .update({
+          home_score: homeScoreNum,
+          away_score: awayScoreNum,
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', selectedMatch.id);
+      
+      if (error) {
+        console.error('Error updating match:', error);
+        return;
+      }
+      
+      setResultModal(false);
+      setSelectedMatch(null);
+      setHomeScore('');
+      setAwayScore('');
+    } catch (error) {
+      console.error('Error submitting result:', error);
+    }
+  };
+
+  const handleShareYoutube = async () => {
+    if (!selectedMatch) return;
+    
+    const link = goLiveWithoutLink ? '' : youtubeLink;
+    if (!goLiveWithoutLink && !youtubeLink) return;
+    
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .update({
+          youtube_link: link,
+          status: 'live',
+        })
+        .eq('id', selectedMatch.id);
+      
+      if (error) {
+        console.error('Error sharing YouTube link:', error);
+        return;
+      }
+      
+      setYoutubeModal(false);
+      setSelectedMatch(null);
+      setYoutubeLink('');
+      setGoLiveWithoutLink(false);
+    } catch (error) {
+      console.error('Error sharing YouTube link:', error);
+    }
   };
 
   const getRoundName = (round: number, totalRounds: number) => {
@@ -248,6 +291,20 @@ export default function TournamentBracketScreen() {
     );
   };
 
+  if (groupsLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
+  
   if (!tournament || !bracketData) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
