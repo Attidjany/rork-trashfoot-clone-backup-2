@@ -12,7 +12,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Trophy, Users, Calendar } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+
+let DateTimePicker: any = null;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
+
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { useSession } from '@/hooks/use-session';
 import { useGameStore } from '@/hooks/use-game-store';
@@ -404,35 +409,53 @@ export default function CreateCompetitionScreen() {
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Competition Deadline</Text>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Calendar size={20} color="#0EA5E9" />
-            <Text style={styles.dateButtonText}>
-              {deadlineDate.toLocaleDateString('en-US', { 
-                weekday: 'short',
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric' 
-              })}
-            </Text>
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={deadlineDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              minimumDate={new Date()}
-              onChange={(event: any, selectedDate: Date | undefined) => {
-                setShowDatePicker(Platform.OS === 'ios');
-                if (selectedDate) {
-                  const newDate = new Date(selectedDate);
+          {Platform.OS === 'web' ? (
+            <TextInput
+              style={styles.input}
+              value={deadlineDate.toISOString().split('T')[0]}
+              onChangeText={(text) => {
+                const newDate = new Date(text);
+                if (!isNaN(newDate.getTime())) {
                   newDate.setHours(23, 59, 59, 999);
                   setDeadlineDate(newDate);
                 }
               }}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#64748B"
             />
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.dateButton}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Calendar size={20} color="#0EA5E9" />
+                <Text style={styles.dateButtonText}>
+                  {deadlineDate.toLocaleDateString('en-US', { 
+                    weekday: 'short',
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                  })}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && DateTimePicker && (
+                <DateTimePicker
+                  value={deadlineDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  minimumDate={new Date()}
+                  onChange={(event: any, selectedDate: Date | undefined) => {
+                    setShowDatePicker(Platform.OS === 'ios');
+                    if (selectedDate) {
+                      const newDate = new Date(selectedDate);
+                      newDate.setHours(23, 59, 59, 999);
+                      setDeadlineDate(newDate);
+                    }
+                  }}
+                />
+              )}
+            </>
           )}
           <View style={[styles.infoBox, { marginTop: 8 }]}>
             <Text style={styles.infoText}>
