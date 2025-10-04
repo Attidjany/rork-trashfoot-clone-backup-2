@@ -819,6 +819,13 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
   const logout = useCallback(async () => {
     console.log('🔓 Logging out user...');
     try {
+      console.log('🔄 Signing out from Supabase...');
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('❌ Supabase signOut error:', error);
+        throw error;
+      }
+      
       console.log('🔄 Clearing local state...');
       setCurrentUser(null);
       setGroups([]);
@@ -827,12 +834,6 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
       
       console.log('🔄 Removing persisted active group...');
       await persistActiveGroupId(null);
-      
-      console.log('🔄 Signing out from Supabase...');
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) {
-        console.error('❌ Supabase signOut error:', error);
-      }
       
       console.log('✅ Logout successful - state cleared');
     } catch (error) {
