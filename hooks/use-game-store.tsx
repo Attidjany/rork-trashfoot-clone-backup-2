@@ -739,6 +739,83 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
     console.log('=== USER LOGIN COMPLETE ===');
   }, []);
 
+  const updateProfile = useCallback(async (name: string, gamerHandle: string) => {
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      console.log('🔄 Updating profile:', { name, gamerHandle });
+
+      const { data: uData, error: uErr } = await supabase.auth.getUser();
+      if (uErr) throw uErr;
+      if (!uData?.user) {
+        throw new Error('User not authenticated');
+      }
+
+      const { data: player, error: playerFetchError } = await supabase
+        .from('players')
+        .select('id')
+        .eq('auth_user_id', uData.user.id)
+        .single();
+
+      if (playerFetchError || !player) {
+        throw new Error('Player not found');
+      }
+
+      const { data: existingHandle, error: checkError } = await supabase
+        .from('players')
+        .select('id')
+        .eq('gamer_handle', gamerHandle)
+        .neq('id', player.id)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking handle:', checkError);
+      }
+
+      if (existingHandle) {
+        throw new Error('This gamer handle is already taken. Please choose another one.');
+      }
+
+      const { data: updatedPlayer, error: updateError } = await supabase
+        .from('players')
+        .update({
+          name,
+          gamer_handle: gamerHandle,
+        })
+        .eq('id', player.id)
+        .select()
+        .single();
+
+      if (updateError || !updatedPlayer) {
+        console.error('Profile update error:', updateError);
+        throw new Error(`Failed to update profile: ${updateError?.message || 'Unknown error'}`);
+      }
+
+      console.log('✅ Profile updated successfully:', updatedPlayer);
+
+      setCurrentUser({
+        ...currentUser,
+        name: updatedPlayer.name,
+        gamerHandle: updatedPlayer.gamer_handle,
+      });
+
+      return {
+        success: true,
+        player: {
+          id: updatedPlayer.id,
+          name: updatedPlayer.name,
+          gamerHandle: updatedPlayer.gamer_handle,
+          email: updatedPlayer.email,
+        },
+      };
+    } catch (error: any) {
+      console.error('❌ Profile update error:', error);
+      throw error;
+    }
+  }, [currentUser]);
+
   const logout = useCallback(async () => {
     console.log('🔓 Logging out user...');
     try {
@@ -1012,6 +1089,7 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
     deleteMatch,
     correctMatchScore,
     setLoggedInUser,
+    updateProfile,
     logout,
   };
 });

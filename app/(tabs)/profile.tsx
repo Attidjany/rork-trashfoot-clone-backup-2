@@ -38,10 +38,10 @@ export default function ProfileScreen() {
 
   const {
     currentUser,
-    setLoggedInUser,
     setActiveGroupId,
     activeGroupId,
     logout: logoutFromStore,
+    updateProfile,
     isHydrated,
   } = useGameStore();
 
@@ -70,8 +70,8 @@ export default function ProfileScreen() {
   const [handleSuggestions, setHandleSuggestions] = useState<string[]>([]);
   const [checkingHandle, setCheckingHandle] = useState(false);
 
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
-  const updateProfileMutation = trpc.auth.updateProfile.useMutation();
   const joinGroupMutation = trpc.groups.join.useMutation();
 
   const currentPlayer = activeGroup?.members.find(m => m.email === user?.email);
@@ -283,27 +283,14 @@ export default function ProfileScreen() {
       return;
     }
 
+    setIsUpdatingProfile(true);
     try {
       console.log('🔄 Updating profile...');
-      const result = await updateProfileMutation.mutateAsync({
-        name: editName.trim(),
-        gamerHandle: editGamerHandle.trim(),
-      });
+      const result = await updateProfile(editName.trim(), editGamerHandle.trim());
 
       console.log('✅ Profile update result:', result);
 
-      if (result.success && result.player) {
-        if (currentUser) {
-          const updatedPlayer = {
-            ...currentUser,
-            name: result.player.name,
-            gamerHandle: result.player.gamerHandle,
-            email: result.player.email,
-          };
-          console.log('🔄 Updating game store with new player data:', updatedPlayer);
-          setLoggedInUser(updatedPlayer);
-        }
-        
+      if (result.success) {
         console.log('🔄 Refetching groups to get updated player data...');
         await refetchGroups();
         
@@ -317,6 +304,8 @@ export default function ProfileScreen() {
     } catch (error: any) {
       console.error('❌ Profile update error:', error);
       Alert.alert('Error', error?.message || 'Failed to update profile');
+    } finally {
+      setIsUpdatingProfile(false);
     }
   };
 
@@ -709,10 +698,10 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={styles.submitButton}
                 onPress={handleUpdateProfile}
-                disabled={updateProfileMutation.isPending}
+                disabled={isUpdatingProfile}
               >
                 <Text style={styles.submitButtonText}>
-                  {updateProfileMutation.isPending ? 'Saving...' : 'Save'}
+                  {isUpdatingProfile ? 'Saving...' : 'Save'}
                 </Text>
               </TouchableOpacity>
             </View>
