@@ -7,10 +7,12 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Trophy, Users, Calendar } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { useSession } from '@/hooks/use-session';
 import { useGameStore } from '@/hooks/use-game-store';
@@ -29,7 +31,13 @@ export default function CreateCompetitionScreen() {
   const [name, setName] = useState('');
   const [type, setType] = useState<'league' | 'tournament' | 'friendly'>('league');
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
-  const [deadlineDays, setDeadlineDays] = useState('7');
+  const [deadlineDate, setDeadlineDate] = useState<Date>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 7);
+    date.setHours(23, 59, 59, 999);
+    return date;
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
   
   // League options
   const [leagueFormat, setLeagueFormat] = useState<'single' | 'double'>('single');
@@ -137,7 +145,7 @@ export default function CreateCompetitionScreen() {
           friendly_type: type === 'friendly' ? friendlyType : null,
           friendly_target: type === 'friendly' ? parseInt(friendlyTarget) || 3 : null,
           knockout_min_players: type === 'tournament' ? 4 : null,
-          deadline_days: parseInt(deadlineDays) || null,
+          end_date: deadlineDate.toISOString(),
         })
         .select()
         .single();
@@ -170,7 +178,8 @@ export default function CreateCompetitionScreen() {
         type,
         leagueFormat,
         parseInt(friendlyTarget) || 3,
-        tournamentType
+        tournamentType,
+        deadlineDate
       );
 
       if (matches.length > 0) {
@@ -208,10 +217,11 @@ export default function CreateCompetitionScreen() {
     type: 'league' | 'tournament' | 'friendly',
     leagueFormat?: 'single' | 'double',
     friendlyTarget?: number,
-    tournamentType?: 'knockout'
+    tournamentType?: 'knockout',
+    deadline?: Date
   ) {
     const matches: any[] = [];
-    const baseTime = Date.now();
+    const scheduledTime = deadline ? deadline.toISOString() : new Date(Date.now() + 7 * 86400000).toISOString();
 
     if (type === 'league') {
       for (let i = 0; i < participantIds.length; i++) {
@@ -221,7 +231,7 @@ export default function CreateCompetitionScreen() {
             home_player_id: participantIds[i],
             away_player_id: participantIds[j],
             status: 'scheduled',
-            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+            scheduled_time: scheduledTime,
           });
 
           if (leagueFormat === 'double') {
@@ -230,7 +240,7 @@ export default function CreateCompetitionScreen() {
               home_player_id: participantIds[j],
               away_player_id: participantIds[i],
               status: 'scheduled',
-              scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+              scheduled_time: scheduledTime,
             });
           }
         }
@@ -243,7 +253,7 @@ export default function CreateCompetitionScreen() {
           home_player_id: participantIds[0],
           away_player_id: participantIds[1],
           status: 'scheduled',
-          scheduled_time: new Date(baseTime + i * 86400000).toISOString(),
+          scheduled_time: scheduledTime,
         });
       }
     } else if (type === 'tournament' && tournamentType === 'knockout') {
@@ -254,7 +264,7 @@ export default function CreateCompetitionScreen() {
             home_player_id: participantIds[i],
             away_player_id: participantIds[i + 1],
             status: 'scheduled',
-            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+            scheduled_time: scheduledTime,
           });
         }
       }
@@ -393,19 +403,40 @@ export default function CreateCompetitionScreen() {
         )}
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Competition Deadline (Days)</Text>
-          <TextInput
-            style={styles.input}
-            value={deadlineDays}
-            onChangeText={setDeadlineDays}
-            placeholder="7"
-            placeholderTextColor="#64748B"
-            keyboardType="numeric"
-            maxLength={3}
-          />
+          <Text style={styles.label}>Competition Deadline</Text>
+          <TouchableOpacity
+            style={styles.dateButton}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Calendar size={20} color="#0EA5E9" />
+            <Text style={styles.dateButtonText}>
+              {deadlineDate.toLocaleDateString('en-US', { 
+                weekday: 'short',
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+              })}
+            </Text>
+          </TouchableOpacity>
+          {showDatePicker && (
+            <DateTimePicker
+              value={deadlineDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              minimumDate={new Date()}
+              onChange={(event: any, selectedDate: Date | undefined) => {
+                setShowDatePicker(Platform.OS === 'ios');
+                if (selectedDate) {
+                  const newDate = new Date(selectedDate);
+                  newDate.setHours(23, 59, 59, 999);
+                  setDeadlineDate(newDate);
+                }
+              }}
+            />
+          )}
           <View style={[styles.infoBox, { marginTop: 8 }]}>
             <Text style={styles.infoText}>
-              ⏰ After {deadlineDays || '0'} days, all unplayed matches will be automatically deleted and the competition will be marked as completed.
+              ⏰ All matches must be played before this deadline. After the deadline, unplayed matches will be automatically deleted.
             </Text>
           </View>
         </View>
@@ -648,5 +679,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600' as const,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1E293B',
+    padding: 16,
+    borderRadius: 12,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: '#fff',
+    flex: 1,
   },
 });

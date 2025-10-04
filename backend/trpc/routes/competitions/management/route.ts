@@ -14,7 +14,7 @@ export const createCompetitionProcedure = protectedProcedure
       friendlyTarget: z.number().optional(),
       tournamentType: z.enum(['knockout', 'group_stage', 'mixed']).optional(),
       knockoutMinPlayers: z.number().optional(),
-      deadlineDays: z.number().optional(),
+      endDate: z.string().optional(),
     })
   )
   .mutation(async ({ input, ctx }) => {
@@ -57,7 +57,7 @@ export const createCompetitionProcedure = protectedProcedure
         friendly_type: input.friendlyType,
         friendly_target: input.friendlyTarget,
         knockout_min_players: input.knockoutMinPlayers,
-        deadline_days: input.deadlineDays,
+        end_date: input.endDate,
       })
       .select()
       .single();
@@ -82,13 +82,15 @@ export const createCompetitionProcedure = protectedProcedure
       throw new Error('Failed to add participants');
     }
 
+    const deadline = input.endDate ? new Date(input.endDate) : null;
     const matches = generateMatches(
       competition.id,
       input.participantIds,
       input.type,
       input.leagueFormat,
       input.friendlyTarget,
-      input.tournamentType
+      input.tournamentType,
+      deadline
     );
 
     if (matches.length > 0) {
@@ -123,10 +125,11 @@ function generateMatches(
   type: 'league' | 'tournament' | 'friendly',
   leagueFormat?: 'single' | 'double',
   friendlyTarget?: number,
-  tournamentType?: 'knockout' | 'group_stage' | 'mixed'
+  tournamentType?: 'knockout' | 'group_stage' | 'mixed',
+  deadline?: Date | null
 ) {
   const matches: any[] = [];
-  const baseTime = Date.now();
+  const scheduledTime = deadline ? deadline.toISOString() : new Date(Date.now() + 7 * 86400000).toISOString();
 
   if (type === 'league') {
     for (let i = 0; i < participantIds.length; i++) {
@@ -136,7 +139,7 @@ function generateMatches(
           home_player_id: participantIds[i],
           away_player_id: participantIds[j],
           status: 'scheduled',
-          scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+          scheduled_time: scheduledTime,
         });
 
         if (leagueFormat === 'double') {
@@ -145,7 +148,7 @@ function generateMatches(
             home_player_id: participantIds[j],
             away_player_id: participantIds[i],
             status: 'scheduled',
-            scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+            scheduled_time: scheduledTime,
           });
         }
       }
@@ -158,7 +161,7 @@ function generateMatches(
         home_player_id: participantIds[0],
         away_player_id: participantIds[1],
         status: 'scheduled',
-        scheduled_time: new Date(baseTime + i * 86400000).toISOString(),
+        scheduled_time: scheduledTime,
       });
     }
   } else if (type === 'tournament' && tournamentType === 'knockout') {
@@ -169,7 +172,7 @@ function generateMatches(
           home_player_id: participantIds[i],
           away_player_id: participantIds[i + 1],
           status: 'scheduled',
-          scheduled_time: new Date(baseTime + matches.length * 86400000).toISOString(),
+          scheduled_time: scheduledTime,
         });
       }
     }

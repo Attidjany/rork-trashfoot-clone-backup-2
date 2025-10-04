@@ -9,7 +9,7 @@ export function getMatchCountdown(scheduledTime: string): {
 
   if (diffMs <= 0) {
     return {
-      text: 'Now',
+      text: 'Expired',
       color: '#EF4444',
       isUrgent: true,
     };
@@ -21,7 +21,7 @@ export function getMatchCountdown(scheduledTime: string): {
 
   if (diffMinutes < 60) {
     return {
-      text: `${diffMinutes}m`,
+      text: `${diffMinutes}m left`,
       color: '#EF4444',
       isUrgent: true,
     };
@@ -29,41 +29,15 @@ export function getMatchCountdown(scheduledTime: string): {
 
   if (diffHours < 24) {
     return {
-      text: `${diffHours}h`,
+      text: `${diffHours}h left`,
       color: '#F59E0B',
       isUrgent: true,
     };
   }
 
   return {
-    text: `${diffDays}d`,
+    text: `${diffDays}d left`,
     color: '#64748B',
     isUrgent: false,
   };
-}
-
-export function getCompetitionDeadline(
-  startDate: string,
-  deadlineDays?: number
-): Date | null {
-  if (!deadlineDays) return null;
-
-  const start = new Date(startDate);
-  const deadline = new Date(start);
-  deadline.setDate(deadline.getDate() + deadlineDays);
-  deadline.setHours(23, 59, 59, 999);
-
-  return deadline;
-}
-
-export function isCompetitionExpired(
-  startDate: string,
-  deadlineDays?: number
-): boolean {
-  if (!deadlineDays) return false;
-
-  const deadline = getCompetitionDeadline(startDate, deadlineDays);
-  if (!deadline) return false;
-
-  return new Date().getTime() > deadline.getTime();
 }

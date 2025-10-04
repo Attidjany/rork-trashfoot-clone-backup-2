@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Plus, Calendar, Trophy, Youtube, Clock, CheckCircle, Target, Timer } from 'lucide-react-native';
+import { Plus, Calendar, Trophy, Youtube, CheckCircle, Target, Timer } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Match, Competition } from '@/types/game';
@@ -273,25 +273,14 @@ export default function MatchesScreen() {
                 <Text style={styles.liveText}>LIVE</Text>
               </View>
             ) : (
-              <View style={styles.countdownContainer}>
-                <View style={styles.timeContainer}>
-                  <Clock size={14} color="#64748B" />
-                  <Text style={styles.timeText}>
-                    {new Date(match.scheduledTime).toLocaleTimeString([], { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
-                  </Text>
-                </View>
-                <View style={[
-                  styles.countdownBadge,
-                  { backgroundColor: getMatchCountdown(match.scheduledTime).isUrgent ? 'rgba(239, 68, 68, 0.1)' : 'rgba(100, 116, 139, 0.1)' }
-                ]}>
-                  <Timer size={12} color={getMatchCountdown(match.scheduledTime).color} />
-                  <Text style={[styles.countdownText, { color: getMatchCountdown(match.scheduledTime).color }]}>
-                    {getMatchCountdown(match.scheduledTime).text}
-                  </Text>
-                </View>
+              <View style={[
+                styles.countdownBadge,
+                { backgroundColor: getMatchCountdown(match.scheduledTime).isUrgent ? 'rgba(239, 68, 68, 0.1)' : 'rgba(100, 116, 139, 0.1)' }
+              ]}>
+                <Timer size={14} color={getMatchCountdown(match.scheduledTime).color} />
+                <Text style={[styles.countdownText, { color: getMatchCountdown(match.scheduledTime).color }]}>
+                  {getMatchCountdown(match.scheduledTime).text}
+                </Text>
               </View>
             )}
           </View>
