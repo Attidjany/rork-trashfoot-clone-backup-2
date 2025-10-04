@@ -283,7 +283,16 @@ export function useRealtimeGroups(userId: string | undefined) {
           fetchGroups();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Matches channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to matches changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to matches channel');
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Matches channel subscription timed out');
+        }
+      });
 
     const competitionsChannel = supabase
       .channel('competitions-changes')
@@ -295,7 +304,16 @@ export function useRealtimeGroups(userId: string | undefined) {
           fetchGroups();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Competitions channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to competitions changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to competitions channel');
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Competitions channel subscription timed out');
+        }
+      });
 
     const groupsChannel = supabase
       .channel('groups-changes')
@@ -307,7 +325,16 @@ export function useRealtimeGroups(userId: string | undefined) {
           fetchGroups();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Groups channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to groups changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to groups channel');
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Groups channel subscription timed out');
+        }
+      });
 
     const groupMembersChannel = supabase
       .channel('group-members-changes')
@@ -319,7 +346,16 @@ export function useRealtimeGroups(userId: string | undefined) {
           fetchGroups();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Group members channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to group members changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to group members channel');
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Group members channel subscription timed out');
+        }
+      });
 
     const playersChannel = supabase
       .channel('players-changes')
@@ -331,7 +367,16 @@ export function useRealtimeGroups(userId: string | undefined) {
           fetchGroups();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Players channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to players changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to players channel');
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Players channel subscription timed out');
+        }
+      });
 
     channels.push(matchesChannel, competitionsChannel, groupsChannel, groupMembersChannel, playersChannel);
 

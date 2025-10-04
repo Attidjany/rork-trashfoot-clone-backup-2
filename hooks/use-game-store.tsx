@@ -163,7 +163,16 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Chat channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to chat messages');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to chat channel');
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Chat channel subscription timed out');
+        }
+      });
 
     return () => {
       console.log('💬 Cleaning up chat subscription');
