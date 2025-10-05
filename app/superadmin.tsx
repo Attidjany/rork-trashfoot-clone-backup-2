@@ -111,7 +111,8 @@ export default function SuperAdminScreen() {
   const setupRealtimeSubscriptions = useCallback(() => {
     const groupsChannel = supabase
       .channel('superadmin-groups')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, (payload) => {
+        console.log('🔄 Groups table changed:', payload.eventType, payload);
         loadGroups();
         loadStats();
       })
@@ -335,29 +336,41 @@ export default function SuperAdminScreen() {
 
   const loadCompetitions = async () => {
     try {
-      const { data, error, count } = await supabase
+      console.log('🔍 Loading competitions...');
+      
+      const { data: competitionsData, error: competitionsError } = await supabase
         .from('competitions')
-        .select(`
-          id,
-          name,
-          type,
-          status,
-          group:groups(name),
-          matches(id),
-          participants:competition_participants(id)
-        `, { count: 'exact' })
+        .select('*')
         .order('created_at', { ascending: false });
 
-      console.log('Competitions query result:', { data, error, count, dataLength: data?.length });
-      
-      if (error) {
-        console.error('Competitions query error:', error);
-        throw error;
+      if (competitionsError) {
+        console.error('❌ Competitions query error:', competitionsError);
+        throw competitionsError;
       }
-      
-      setCompetitions(data || []);
+
+      console.log('✅ Competitions loaded:', competitionsData?.length || 0);
+
+      const enrichedCompetitions = await Promise.all(
+        (competitionsData || []).map(async (comp) => {
+          const [groupRes, matchesRes, participantsRes] = await Promise.all([
+            supabase.from('groups').select('name').eq('id', comp.group_id).single(),
+            supabase.from('matches').select('id').eq('competition_id', comp.id),
+            supabase.from('competition_participants').select('id').eq('competition_id', comp.id),
+          ]);
+
+          return {
+            ...comp,
+            group: groupRes.data,
+            matches: matchesRes.data || [],
+            participants: participantsRes.data || [],
+          };
+        })
+      );
+
+      console.log('✅ Enriched competitions:', enrichedCompetitions.length);
+      setCompetitions(enrichedCompetitions);
     } catch (error) {
-      console.error('Error loading competitions:', error);
+      console.error('❌ Error loading competitions:', error);
     }
   };
 
@@ -929,13 +942,23 @@ export default function SuperAdminScreen() {
         const awayPlayer = getPlayerInfo(match.away_player);
         const compInfo = getCompetitionInfo(match.competition);
         
+        const isCompleted = match.status === 'completed';
+        const homeWon = isCompleted && match.home_score! > match.away_score!;
+        const awayWon = isCompleted && match.away_score! > match.home_score!;
+        
         return (
           <View key={match.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>
-                  {homePlayer.name} vs {awayPlayer.name}
-                </Text>
+                <View style={styles.matchPlayersRow}>
+                  <Text style={[styles.matchPlayerName, homeWon && styles.winnerText]}>
+                    {homePlayer.name}
+                  </Text>
+                  <Text style={styles.matchVs}>vs</Text>
+                  <Text style={[styles.matchPlayerName, awayWon && styles.winnerText]}>
+                    {awayPlayer.name}
+                  </Text>
+                </View>
                 <Text style={styles.cardSubtitle}>
                   {compInfo.groupName} • {compInfo.name}
                 </Text>
@@ -943,9 +966,15 @@ export default function SuperAdminScreen() {
                   Status: {match.status}
                 </Text>
                 {match.status === 'completed' && (
-                  <Text style={styles.scoreText}>
-                    Score: {match.home_score} - {match.away_score}
-                  </Text>
+                  <View style={styles.matchScoreRow}>
+                    <Text style={[styles.matchScore, homeWon && styles.winnerScore]}>
+                      {match.home_score}
+                    </Text>
+                    <Text style={styles.matchScoreSeparator}>-</Text>
+                    <Text style={[styles.matchScore, awayWon && styles.winnerScore]}>
+                      {match.away_score}
+                    </Text>
+                  </View>
                 )}
               </View>
             </View>
@@ -1446,6 +1475,42 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#3B82F6',
     marginTop: 4,
+  },
+  matchPlayersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  matchPlayerName: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#fff',
+  },
+  matchVs: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  matchScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  matchScore: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: '#fff',
+  },
+  matchScoreSeparator: {
+    fontSize: 16,
+    color: '#64748B',
+  },
+  winnerText: {
+    color: '#10B981',
+  },
+  winnerScore: {
+    color: '#10B981',
   },
   membersList: {
     marginTop: 12,

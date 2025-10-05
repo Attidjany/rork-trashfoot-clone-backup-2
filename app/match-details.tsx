@@ -82,10 +82,19 @@ export default function MatchDetailsScreen() {
         </View>
 
         <View style={styles.scoreSection}>
-          <View style={styles.team}>
-            <Text style={styles.teamName}>{homePlayer.name}</Text>
+          <View style={[
+            styles.team,
+            match.status === 'completed' && match.homeScore! > match.awayScore! && styles.winnerTeam
+          ]}>
+            <Text style={[
+              styles.teamName,
+              match.status === 'completed' && match.homeScore! > match.awayScore! && styles.winnerName
+            ]}>{homePlayer.name}</Text>
             {match.status === 'completed' && (
-              <Text style={styles.score}>{match.homeScore}</Text>
+              <Text style={[
+                styles.score,
+                match.homeScore! > match.awayScore! && styles.winnerScore
+              ]}>{match.homeScore}</Text>
             )}
           </View>
 
@@ -101,10 +110,19 @@ export default function MatchDetailsScreen() {
             )}
           </View>
 
-          <View style={styles.team}>
-            <Text style={styles.teamName}>{awayPlayer.name}</Text>
+          <View style={[
+            styles.team,
+            match.status === 'completed' && match.awayScore! > match.homeScore! && styles.winnerTeam
+          ]}>
+            <Text style={[
+              styles.teamName,
+              match.status === 'completed' && match.awayScore! > match.homeScore! && styles.winnerName
+            ]}>{awayPlayer.name}</Text>
             {match.status === 'completed' && (
-              <Text style={styles.score}>{match.awayScore}</Text>
+              <Text style={[
+                styles.score,
+                match.awayScore! > match.homeScore! && styles.winnerScore
+              ]}>{match.awayScore}</Text>
             )}
           </View>
         </View>
@@ -247,6 +265,11 @@ const styles = StyleSheet.create({
   team: {
     flex: 1,
     alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+  },
+  winnerTeam: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
   },
   teamName: {
     fontSize: 16,
@@ -254,10 +277,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 8,
   },
+  winnerName: {
+    color: '#10B981',
+    fontWeight: '700' as const,
+  },
   score: {
     fontSize: 36,
     fontWeight: '700' as const,
     color: '#fff',
+  },
+  winnerScore: {
+    color: '#10B981',
   },
   scoreSeparator: {
     paddingHorizontal: 20,

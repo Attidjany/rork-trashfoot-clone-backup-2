@@ -353,6 +353,11 @@ export default function MatchesScreen() {
     const awayPlayer = activeGroup.members.find(m => m.id === match.awayPlayerId);
     const competition = activeGroup.competitions.find(c => c.id === match.competitionId);
 
+    const isCompleted = match.status === 'completed';
+    const homeWon = isCompleted && match.homeScore! > match.awayScore!;
+    const awayWon = isCompleted && match.awayScore! > match.homeScore!;
+    const isDraw = isCompleted && match.homeScore === match.awayScore;
+
     return (
       <TouchableOpacity
         key={match.id}
@@ -365,10 +370,10 @@ export default function MatchesScreen() {
         </View>
         
         <View style={styles.matchContent}>
-          <View style={styles.playerSection}>
-            <Text style={styles.playerName}>@{homePlayer?.gamerHandle}</Text>
+          <View style={[styles.playerSection, homeWon && styles.winnerSection]}>
+            <Text style={[styles.playerName, homeWon && styles.winnerName]}>@{homePlayer?.gamerHandle}</Text>
             {match.status === 'completed' && (
-              <Text style={styles.score}>{match.homeScore}</Text>
+              <Text style={[styles.score, homeWon && styles.winnerScore]}>{match.homeScore}</Text>
             )}
           </View>
 
@@ -393,11 +398,11 @@ export default function MatchesScreen() {
             )}
           </View>
 
-          <View style={styles.playerSection}>
+          <View style={[styles.playerSection, awayWon && styles.winnerSection]}>
             {match.status === 'completed' && (
-              <Text style={styles.score}>{match.awayScore}</Text>
+              <Text style={[styles.score, awayWon && styles.winnerScore]}>{match.awayScore}</Text>
             )}
-            <Text style={styles.playerName}>@{awayPlayer?.gamerHandle}</Text>
+            <Text style={[styles.playerName, awayWon && styles.winnerName]}>@{awayPlayer?.gamerHandle}</Text>
           </View>
         </View>
 
@@ -796,10 +801,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '500' as const,
   },
+  winnerSection: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  winnerName: {
+    color: '#10B981',
+    fontWeight: '700' as const,
+  },
   score: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: '#fff',
+  },
+  winnerScore: {
+    color: '#10B981',
   },
   matchCenter: {
     paddingHorizontal: 16,
