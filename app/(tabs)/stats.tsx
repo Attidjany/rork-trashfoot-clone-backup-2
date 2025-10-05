@@ -11,7 +11,7 @@ import { Trophy, Target, Users, Table, ChevronDown, ChevronUp, Award } from 'luc
 import { useGameStore } from '@/hooks/use-game-store';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Player } from '@/types/game';
+import { Player, Match } from '@/types/game';
 import { AchievementBadges } from '@/components/AchievementBadges';
 
 export default function StatsScreen() {
@@ -118,6 +118,99 @@ export default function StatsScreen() {
     if (!activeGroup) return [];
     return [...activeGroup.members].sort((a, b) => b.stats.points - a.stats.points);
   }, [activeGroup, completedMatchesCount]);
+
+  const monthlyStats = useMemo(() => {
+    if (!activeGroup) return [];
+    
+    console.log('📊 Calculating monthly stats, completed matches:', completedMatchesCount, 'timestamp:', Date.now());
+    
+    const completedMatches = allMatches.filter(m => m.status === 'completed' && m.completedAt);
+    
+    const monthlyData: { [key: string]: { month: string, year: number, matches: Match[] } } = {};
+    
+    completedMatches.forEach(match => {
+      const completedDate = new Date(match.completedAt!);
+      const monthKey = `${completedDate.getFullYear()}-${String(completedDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          month: completedDate.toLocaleString('default', { month: 'long' }),
+          year: completedDate.getFullYear(),
+          matches: [],
+        };
+      }
+      
+      monthlyData[monthKey].matches.push(match);
+    });
+    
+    const sortedMonths = Object.keys(monthlyData).sort().reverse();
+    
+    return sortedMonths.map(monthKey => {
+      const { month, year, matches } = monthlyData[monthKey];
+      
+      const monthlyPlayerStats = activeGroup.members.map(player => {
+        const playerMatches = matches.filter(
+          m => m.homePlayerId === player.id || m.awayPlayerId === player.id
+        );
+        
+        let wins = 0, draws = 0, losses = 0, goalsFor = 0, goalsAgainst = 0;
+        
+        playerMatches.forEach(match => {
+          const isHome = match.homePlayerId === player.id;
+          const playerScore = isHome ? match.homeScore! : match.awayScore!;
+          const opponentScore = isHome ? match.awayScore! : match.homeScore!;
+          
+          goalsFor += playerScore;
+          goalsAgainst += opponentScore;
+          
+          if (playerScore > opponentScore) {
+            wins++;
+          } else if (playerScore === opponentScore) {
+            draws++;
+          } else {
+            losses++;
+          }
+        });
+        
+        const played = wins + draws + losses;
+        const points = wins * 3 + draws;
+        
+        return {
+          ...player,
+          monthlyStats: {
+            played,
+            wins,
+            draws,
+            losses,
+            goalsFor,
+            goalsAgainst,
+            points,
+          }
+        };
+      }).filter(p => p.monthlyStats.played > 0)
+        .sort((a, b) => {
+          if (b.monthlyStats.points !== a.monthlyStats.points) {
+            return b.monthlyStats.points - a.monthlyStats.points;
+          }
+          const aGD = a.monthlyStats.goalsFor - a.monthlyStats.goalsAgainst;
+          const bGD = b.monthlyStats.goalsFor - b.monthlyStats.goalsAgainst;
+          return bGD - aGD;
+        });
+      
+      const currentDate = new Date();
+      const isCurrentMonth = currentDate.getFullYear() === year && 
+                            currentDate.getMonth() === new Date(`${year}-${monthKey.split('-')[1]}-01`).getMonth();
+      
+      return {
+        monthKey,
+        month,
+        year,
+        players: monthlyPlayerStats,
+        isCurrentMonth,
+        totalMatches: matches.length,
+      };
+    });
+  }, [activeGroup, completedMatchesCount, allMatches]);
 
   const h2hData = useMemo(() => {
     if (selectedPlayers.length === 2 && selectedPlayers[0] && selectedPlayers[1] && activeGroup) {
@@ -382,65 +475,144 @@ export default function StatsScreen() {
         )}
 
         {selectedTab === 'table' && (
-          <View style={styles.tableContainer}>
-            <View style={styles.tableHeaderContainer}>
-              <Text style={styles.tableTitle}>General Table (All Matches)</Text>
-              <Text style={styles.tableSubtitle}>Combined stats from all competitions</Text>
-            </View>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, styles.positionColumn]}>#</Text>
-              <Text style={[styles.tableHeaderText, styles.playerColumn]}>Player</Text>
-              <Text style={[styles.tableHeaderText, styles.statColumn]}>P</Text>
-              <Text style={[styles.tableHeaderText, styles.statColumn]}>W</Text>
-              <Text style={[styles.tableHeaderText, styles.statColumn]}>D</Text>
-              <Text style={[styles.tableHeaderText, styles.statColumn]}>L</Text>
-              <Text style={[styles.tableHeaderText, styles.statColumn]}>GF</Text>
-              <Text style={[styles.tableHeaderText, styles.statColumn]}>GA</Text>
-              <Text style={[styles.tableHeaderText, styles.statColumn]}>GD</Text>
-              <Text style={[styles.tableHeaderText, styles.statColumn]}>PTS</Text>
-            </View>
-            
-            {sortedPlayers.map((player, index) => {
-              if (!player?.gamerHandle?.trim()) return null;
-              const goalDiff = player.stats.goalsFor - player.stats.goalsAgainst;
+          <View style={styles.generalTabContainer}>
+            {/* Overall Table */}
+            <View style={styles.tableContainer}>
+              <View style={styles.tableHeaderContainer}>
+                <Text style={styles.tableTitle}>Overall Table</Text>
+                <Text style={styles.tableSubtitle}>Combined stats from all competitions</Text>
+              </View>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderText, styles.positionColumn]}>#</Text>
+                <Text style={[styles.tableHeaderText, styles.playerColumn]}>Player</Text>
+                <Text style={[styles.tableHeaderText, styles.statColumn]}>P</Text>
+                <Text style={[styles.tableHeaderText, styles.statColumn]}>W</Text>
+                <Text style={[styles.tableHeaderText, styles.statColumn]}>D</Text>
+                <Text style={[styles.tableHeaderText, styles.statColumn]}>L</Text>
+                <Text style={[styles.tableHeaderText, styles.statColumn]}>GF</Text>
+                <Text style={[styles.tableHeaderText, styles.statColumn]}>GA</Text>
+                <Text style={[styles.tableHeaderText, styles.statColumn]}>GD</Text>
+                <Text style={[styles.tableHeaderText, styles.statColumn]}>PTS</Text>
+              </View>
               
-              return (
-                <View key={player.id} style={[
-                  styles.tableRow,
-                  index === 0 && styles.firstPlace,
-                  index === 1 && styles.secondPlace,
-                  index === 2 && styles.thirdPlace,
-                ]}>
-                  <Text style={[styles.tableCell, styles.positionColumn, 
-                    index === 0 && styles.goldText,
-                    index === 1 && styles.silverText,
-                    index === 2 && styles.bronzeText,
-                  ]}>{index + 1}</Text>
-                  <View style={[styles.tableCell, styles.playerColumn]}>
-                    <Text style={styles.playerTableName} numberOfLines={1}>
-                      @{player.gamerHandle}
+              {sortedPlayers.map((player, index) => {
+                if (!player?.gamerHandle?.trim()) return null;
+                const goalDiff = player.stats.goalsFor - player.stats.goalsAgainst;
+                
+                return (
+                  <View key={player.id} style={[
+                    styles.tableRow,
+                    index === 0 && styles.firstPlace,
+                    index === 1 && styles.secondPlace,
+                    index === 2 && styles.thirdPlace,
+                  ]}>
+                    <Text style={[styles.tableCell, styles.positionColumn, 
+                      index === 0 && styles.goldText,
+                      index === 1 && styles.silverText,
+                      index === 2 && styles.bronzeText,
+                    ]}>{index + 1}</Text>
+                    <View style={[styles.tableCell, styles.playerColumn]}>
+                      <Text style={styles.playerTableName} numberOfLines={1}>
+                        @{player.gamerHandle}
+                      </Text>
+                      <AchievementBadges 
+                        leaguesWon={player.stats.leaguesWon}
+                        knockoutsWon={player.stats.knockoutsWon}
+                        size="small"
+                      />
+                    </View>
+                    <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.played}</Text>
+                    <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.wins}</Text>
+                    <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.draws}</Text>
+                    <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.losses}</Text>
+                    <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.goalsFor}</Text>
+                    <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.goalsAgainst}</Text>
+                    <Text style={[styles.tableCell, styles.statColumn, goalDiff > 0 && styles.positiveGD]}>
+                      {goalDiff > 0 ? '+' : ''}{goalDiff}
                     </Text>
-                    <AchievementBadges 
-                      leaguesWon={player.stats.leaguesWon}
-                      knockoutsWon={player.stats.knockoutsWon}
-                      size="small"
-                    />
+                    <Text style={[styles.tableCell, styles.statColumn, styles.pointsText]}>
+                      {player.stats.points}
+                    </Text>
                   </View>
-                  <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.played}</Text>
-                  <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.wins}</Text>
-                  <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.draws}</Text>
-                  <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.losses}</Text>
-                  <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.goalsFor}</Text>
-                  <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.goalsAgainst}</Text>
-                  <Text style={[styles.tableCell, styles.statColumn, goalDiff > 0 && styles.positiveGD]}>
-                    {goalDiff > 0 ? '+' : ''}{goalDiff}
-                  </Text>
-                  <Text style={[styles.tableCell, styles.statColumn, styles.pointsText]}>
-                    {player.stats.points}
-                  </Text>
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
+
+            {/* Monthly Tables */}
+            {monthlyStats.length > 0 && (
+              <View style={styles.monthlyTablesContainer}>
+                <Text style={styles.monthlyTablesTitle}>Monthly Tables</Text>
+                {monthlyStats.map(({ monthKey, month, year, players, isCurrentMonth, totalMatches }) => (
+                  <View key={monthKey} style={styles.tableContainer}>
+                    <View style={styles.tableHeaderContainer}>
+                      <View style={styles.monthlyHeaderRow}>
+                        <Text style={styles.tableTitle}>{month} {year}</Text>
+                        {isCurrentMonth && (
+                          <View style={styles.currentMonthBadge}>
+                            <Text style={styles.currentMonthText}>CURRENT</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.tableSubtitle}>{totalMatches} matches completed</Text>
+                    </View>
+                    <View style={styles.tableHeader}>
+                      <Text style={[styles.tableHeaderText, styles.positionColumn]}>#</Text>
+                      <Text style={[styles.tableHeaderText, styles.playerColumn]}>Player</Text>
+                      <Text style={[styles.tableHeaderText, styles.statColumn]}>P</Text>
+                      <Text style={[styles.tableHeaderText, styles.statColumn]}>W</Text>
+                      <Text style={[styles.tableHeaderText, styles.statColumn]}>D</Text>
+                      <Text style={[styles.tableHeaderText, styles.statColumn]}>L</Text>
+                      <Text style={[styles.tableHeaderText, styles.statColumn]}>GF</Text>
+                      <Text style={[styles.tableHeaderText, styles.statColumn]}>GA</Text>
+                      <Text style={[styles.tableHeaderText, styles.statColumn]}>GD</Text>
+                      <Text style={[styles.tableHeaderText, styles.statColumn]}>PTS</Text>
+                    </View>
+                    
+                    {players.map((player, index) => {
+                      if (!player?.gamerHandle?.trim()) return null;
+                      const goalDiff = player.monthlyStats.goalsFor - player.monthlyStats.goalsAgainst;
+                      
+                      return (
+                        <View key={player.id} style={[
+                          styles.tableRow,
+                          index === 0 && styles.firstPlace,
+                          index === 1 && styles.secondPlace,
+                          index === 2 && styles.thirdPlace,
+                        ]}>
+                          <Text style={[styles.tableCell, styles.positionColumn, 
+                            index === 0 && styles.goldText,
+                            index === 1 && styles.silverText,
+                            index === 2 && styles.bronzeText,
+                          ]}>{index + 1}</Text>
+                          <View style={[styles.tableCell, styles.playerColumn]}>
+                            <Text style={styles.playerTableName} numberOfLines={1}>
+                              @{player.gamerHandle}
+                            </Text>
+                            <AchievementBadges 
+                              leaguesWon={player.stats.leaguesWon}
+                              knockoutsWon={player.stats.knockoutsWon}
+                              size="small"
+                            />
+                          </View>
+                          <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.played}</Text>
+                          <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.wins}</Text>
+                          <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.draws}</Text>
+                          <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.losses}</Text>
+                          <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.goalsFor}</Text>
+                          <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.goalsAgainst}</Text>
+                          <Text style={[styles.tableCell, styles.statColumn, goalDiff > 0 && styles.positiveGD]}>
+                            {goalDiff > 0 ? '+' : ''}{goalDiff}
+                          </Text>
+                          <Text style={[styles.tableCell, styles.statColumn, styles.pointsText]}>
+                            {player.monthlyStats.points}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -1224,5 +1396,37 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 16,
     textAlign: 'center',
+  },
+  generalTabContainer: {
+    paddingBottom: 16,
+  },
+  monthlyTablesContainer: {
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+  monthlyTablesTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: '#fff',
+    marginBottom: 16,
+    paddingHorizontal: 0,
+  },
+  monthlyHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  currentMonthBadge: {
+    backgroundColor: 'rgba(14, 165, 233, 0.2)',
+    borderWidth: 1,
+    borderColor: '#0EA5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  currentMonthText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: '#0EA5E9',
   },
 });
