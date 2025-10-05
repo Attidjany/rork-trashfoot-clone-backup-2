@@ -403,7 +403,28 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
         }
       });
 
-    channels.push(matchesChannel, competitionsChannel, groupsChannel, groupMembersChannel, playersChannel);
+    const pendingMembersChannel = supabase
+      .channel('pending-members-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pending_group_members' },
+        (payload) => {
+          console.log('🔄 Pending member change detected:', payload);
+          fetchGroups();
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Pending members channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to pending members changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to pending members channel');
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Pending members channel subscription timed out');
+        }
+      });
+
+    channels.push(matchesChannel, competitionsChannel, groupsChannel, groupMembersChannel, playersChannel, pendingMembersChannel);
 
     return () => {
       console.log('🔌 Cleaning up real-time subscriptions for session');
