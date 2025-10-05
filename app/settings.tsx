@@ -28,17 +28,16 @@ import {
   XCircle,
   Loader
 } from 'lucide-react-native';
-import { useGameStore } from '@/hooks/use-game-store';
 import { useTheme } from '@/hooks/use-theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { trpc } from '@/lib/trpc';
 import { useSession } from '@/hooks/use-session';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, updateProfile, activeGroupId, groups, activeGroup } = useGameStore();
   const { theme, toggleTheme } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [editProfileModal, setEditProfileModal] = useState(false);
@@ -50,21 +49,24 @@ export default function SettingsScreen() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   
   const { user } = useSession();
+  const { groups } = useRealtimeGroups();
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
+  const updateProfileMutation = trpc.auth.updateProfile.useMutation();
   
-  const currentPlayer = activeGroup?.members.find(m => m.email === user?.email);
+  const firstGroup = groups[0];
+  const currentPlayer = firstGroup?.members.find(m => m.email === user?.email);
 
   useEffect(() => {
     if (editProfileModal) {
-      const fallbackName = currentPlayer?.name ?? currentUser?.name ?? (user?.email ? user.email.split('@')[0] : 'Player');
-      const fallbackHandle = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? fallbackName;
+      const fallbackName = currentPlayer?.name ?? (user?.email ? user.email.split('@')[0] : 'Player');
+      const fallbackHandle = currentPlayer?.gamerHandle ?? fallbackName;
       setEditName(currentPlayer?.name ?? fallbackName);
       setEditGamerHandle(currentPlayer?.gamerHandle ?? fallbackHandle);
     }
-  }, [editProfileModal, currentPlayer, currentUser, user]);
+  }, [editProfileModal, currentPlayer, user]);
 
   useEffect(() => {
-    const baseline = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '';
+    const baseline = currentPlayer?.gamerHandle ?? '';
     if (editProfileModal && editGamerHandle.length >= 3 && editGamerHandle !== baseline) {
       const timeoutId = setTimeout(async () => {
         setCheckingHandle(true);
@@ -87,7 +89,7 @@ export default function SettingsScreen() {
       setHandleAvailable(null);
       setHandleSuggestions([]);
     }
-  }, [editGamerHandle, editProfileModal, currentPlayer, currentUser, checkHandleMutation]);
+  }, [editGamerHandle, editProfileModal, currentPlayer, checkHandleMutation]);
 
   const handleUpdateProfile = async () => {
     if (!editName.trim()) {
@@ -98,7 +100,7 @@ export default function SettingsScreen() {
       Alert.alert('Error', 'Please enter a gamer handle');
       return;
     }
-    const baseline = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '';
+    const baseline = currentPlayer?.gamerHandle ?? '';
     if (editGamerHandle !== baseline && handleAvailable === false) {
       Alert.alert('Error', 'Gamer handle is not available');
       return;
@@ -107,18 +109,18 @@ export default function SettingsScreen() {
     setIsUpdatingProfile(true);
     try {
       console.log('🔄 Updating profile...');
-      const result = await updateProfile(editName.trim(), editGamerHandle.trim());
+      await updateProfileMutation.mutateAsync({
+        name: editName.trim(),
+        gamerHandle: editGamerHandle.trim(),
+      });
 
-      console.log('✅ Profile update result:', result);
-
-      if (result.success) {
-        Alert.alert('Success', 'Profile updated successfully!');
-        setEditProfileModal(false);
-        setEditName('');
-        setEditGamerHandle('');
-        setHandleAvailable(null);
-        setHandleSuggestions([]);
-      }
+      console.log('✅ Profile updated successfully');
+      Alert.alert('Success', 'Profile updated successfully!');
+      setEditProfileModal(false);
+      setEditName('');
+      setEditGamerHandle('');
+      setHandleAvailable(null);
+      setHandleSuggestions([]);
     } catch (error: any) {
       console.error('❌ Profile update error:', error);
       Alert.alert('Error', error?.message || 'Failed to update profile');
@@ -234,8 +236,8 @@ export default function SettingsScreen() {
     );
   }
 
-  const displayName = currentPlayer?.name ?? currentUser?.name ?? (user?.email ? user.email.split('@')[0] : 'Player');
-  const displayHandle = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? displayName;
+  const displayName = currentPlayer?.name ?? (user?.email ? user.email.split('@')[0] : 'Player');
+  const displayHandle = currentPlayer?.gamerHandle ?? displayName;
 
   return (
     <View style={styles.container}>
@@ -414,10 +416,10 @@ export default function SettingsScreen() {
               />
               {checkingHandle && <Loader size={20} color="#64748B" />}
               {!checkingHandle &&
-                editGamerHandle !== (currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '') &&
+                editGamerHandle !== (currentPlayer?.gamerHandle ?? '') &&
                 handleAvailable === true && <CheckCircle size={20} color="#10B981" />}
               {!checkingHandle &&
-                editGamerHandle !== (currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '') &&
+                editGamerHandle !== (currentPlayer?.gamerHandle ?? '') &&
                 handleAvailable === false && <XCircle size={20} color="#EF4444" />}
             </View>
 
