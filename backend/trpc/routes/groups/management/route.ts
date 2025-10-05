@@ -33,8 +33,7 @@ export const getPublicGroupsProcedure = protectedProcedure
         is_public,
         created_at,
         admin_id
-      `)
-      .eq('is_public', true);
+      `);
 
     if (error) {
       console.error('Error fetching groups:', error);
@@ -118,7 +117,7 @@ export const createGroupProcedure = protectedProcedure
         description: input.description || '',
         admin_id: player.id,
         invite_code: inviteCode,
-        is_public: true,
+        is_public: false,
       })
       .select()
       .single();

@@ -68,8 +68,7 @@ export default function GroupBrowserScreen() {
 
       const { data: groups, error } = await supabase
         .from('groups')
-        .select('id, name, description, invite_code, is_public, created_at, admin_id')
-        .eq('is_public', true);
+        .select('id, name, description, invite_code, is_public, created_at, admin_id');
 
       if (error) {
         console.error('❌ Error fetching groups:', error);
@@ -272,7 +271,7 @@ export default function GroupBrowserScreen() {
           description: groupDescription.trim() || '',
           admin_id: player.id,
           invite_code: inviteCode,
-          is_public: true,
+          is_public: false,
         })
         .select()
         .single();
