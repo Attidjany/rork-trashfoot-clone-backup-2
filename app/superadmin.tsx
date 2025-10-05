@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,7 @@ import {
 } from 'lucide-react-native';
 import { trpc } from '@/lib/trpc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRealtimeSuperadmin } from '@/hooks/use-realtime-superadmin';
 
 type TabType = 'overview' | 'groups' | 'players' | 'matches' | 'competitions' | 'requests';
 
@@ -64,11 +65,37 @@ export default function SuperAdminScreen() {
     awayScore: 0,
   });
 
-  const statsQuery = trpc.superadmin.getPlatformStats.useQuery();
-  const groupsQuery = trpc.superadmin.getAllGroups.useQuery();
-  const playersQuery = trpc.superadmin.getAllPlayers.useQuery();
-  const matchesQuery = trpc.superadmin.getAllMatches.useQuery();
-  const competitionsQuery = trpc.superadmin.getAllCompetitions.useQuery();
+  const { lastUpdate } = useRealtimeSuperadmin();
+
+  const statsQuery = trpc.superadmin.getPlatformStats.useQuery(undefined, {
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+  const groupsQuery = trpc.superadmin.getAllGroups.useQuery(undefined, {
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+  const playersQuery = trpc.superadmin.getAllPlayers.useQuery(undefined, {
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+  const matchesQuery = trpc.superadmin.getAllMatches.useQuery(undefined, {
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+  const competitionsQuery = trpc.superadmin.getAllCompetitions.useQuery(undefined, {
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    console.log('🔄 Realtime update triggered, refetching all data');
+    statsQuery.refetch();
+    groupsQuery.refetch();
+    playersQuery.refetch();
+    matchesQuery.refetch();
+    competitionsQuery.refetch();
+  }, [lastUpdate]);
 
   const deleteGroupMutation = trpc.superadmin.deleteGroup.useMutation();
   const removeUserMutation = trpc.superadmin.removeUserFromGroup.useMutation();
