@@ -222,7 +222,7 @@ export default function SettingsScreen() {
     </TouchableOpacity>
   );
 
-  if (!currentUser) {
+  if (!user) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <Stack.Screen options={{ title: 'Settings' }} />
@@ -239,6 +239,9 @@ export default function SettingsScreen() {
       </View>
     );
   }
+
+  const displayName = currentPlayer?.name ?? currentUser?.name ?? (user?.email ? user.email.split('@')[0] : 'Player');
+  const displayHandle = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? displayName;
 
   return (
     <View style={styles.container}>
@@ -262,9 +265,9 @@ export default function SettingsScreen() {
               <User size={32} color="#fff" />
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{currentUser.name}</Text>
+              <Text style={styles.profileName}>{displayName}</Text>
               <Text style={styles.profileSubtitle}>
-                @{currentPlayer?.gamerHandle ?? currentUser.gamerHandle}
+                @{displayHandle}
               </Text>
             </View>
             <Edit2 size={20} color="#0EA5E9" />
