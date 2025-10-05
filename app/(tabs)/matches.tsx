@@ -383,18 +383,21 @@ export default function MatchesScreen() {
                 <Text style={styles.actionText}>Add Result</Text>
               </TouchableOpacity>
             )}
-            {activeGroup?.adminId === currentPlayerId && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.deleteButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  console.log('🗑️ Delete button pressed for match:', match.id);
-                  handleDeleteMatch(match.id);
-                }}
-              >
-                <Text style={styles.actionText}>Delete</Text>
-              </TouchableOpacity>
-            )}
+          </View>
+        )}
+
+        {(activeGroup?.adminId === currentPlayerId || currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId) && match.status !== 'completed' && (
+          <View style={styles.matchActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={(e) => {
+                e.stopPropagation();
+                console.log('🗑️ Delete button pressed for match:', match.id);
+                handleDeleteMatch(match.id);
+              }}
+            >
+              <Text style={styles.actionText}>Delete</Text>
+            </TouchableOpacity>
           </View>
         )}
 
