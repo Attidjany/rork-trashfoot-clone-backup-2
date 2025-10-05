@@ -11,7 +11,7 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import {
   Users,
   Trophy,
@@ -20,7 +20,6 @@ import {
   Search,
   Crown,
   Trash2,
-  RefreshCw,
   UserX,
   Edit2,
   CheckCircle,
@@ -29,10 +28,10 @@ import {
   Database,
   TrendingUp,
   Eye,
+  LogOut,
 } from 'lucide-react-native';
-import { trpc } from '@/lib/trpc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRealtimeSuperadmin } from '@/hooks/use-realtime-superadmin';
+import { supabase } from '@/lib/supabase';
 
 type TabType = 'overview' | 'groups' | 'players' | 'matches' | 'competitions' | 'requests';
 
@@ -54,8 +53,13 @@ const StatCard = ({ icon: Icon, title, value, subtitle, color = '#3B82F6' }: {
 );
 
 export default function SuperAdminScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [loginError, setLoginError] = useState<string>('');
+
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [correctScoreModal, setCorrectScoreModal] = useState<{ visible: boolean; matchId: string; homeScore: number; awayScore: number }>({
@@ -65,345 +69,668 @@ export default function SuperAdminScreen() {
     awayScore: 0,
   });
 
-  const { lastUpdate } = useRealtimeSuperadmin();
+  const [stats, setStats] = useState<any>({
+    totalPlayers: 0,
+    totalGroups: 0,
+    activeGroups: 0,
+    totalMatches: 0,
+    completedMatches: 0,
+    totalCompetitions: 0,
+    liveMatches: 0,
+  });
+  const [groups, setGroups] = useState<any[]>([]);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [matches, setMatches] = useState<any[]>([]);
+  const [competitions, setCompetitions] = useState<any[]>([]);
+  const [joinRequests, setJoinRequests] = useState<any[]>([]);
 
-  const statsQuery = trpc.superadmin.getPlatformStats.useQuery();
-  const groupsQuery = trpc.superadmin.getAllGroups.useQuery();
-  const playersQuery = trpc.superadmin.getAllPlayers.useQuery();
-  const matchesQuery = trpc.superadmin.getAllMatches.useQuery();
-  const competitionsQuery = trpc.superadmin.getAllCompetitions.useQuery();
-
-  const refetchAll = useCallback(() => {
-    console.log('🔄 Refetching all superadmin data');
-    statsQuery.refetch();
-    groupsQuery.refetch();
-    playersQuery.refetch();
-    matchesQuery.refetch();
-    competitionsQuery.refetch();
-  }, [statsQuery, groupsQuery, playersQuery, matchesQuery, competitionsQuery]);
+  const [dataLoading, setDataLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (lastUpdate > 0) {
-      console.log('🔄 Realtime update triggered');
-      refetchAll();
+    checkAuth();
+  }, []);
+
+  const loadAllData = useCallback(async () => {
+    setDataLoading(true);
+    try {
+      await Promise.all([
+        loadStats(),
+        loadGroups(),
+        loadPlayers(),
+        loadMatches(),
+        loadCompetitions(),
+        loadJoinRequests(),
+      ]);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setDataLoading(false);
     }
-  }, [lastUpdate, refetchAll]);
+  }, []);
 
-  const deleteGroupMutation = trpc.superadmin.deleteGroup.useMutation();
-  const removeUserMutation = trpc.superadmin.removeUserFromGroup.useMutation();
-  const deleteMatchMutation = trpc.superadmin.deleteMatch.useMutation();
-  const correctScoreMutation = trpc.superadmin.correctMatchScore.useMutation();
-  const manageRequestMutation = trpc.superadmin.manageJoinRequest.useMutation();
-  const deleteCompetitionMutation = trpc.superadmin.deleteCompetition.useMutation();
-  const assignAdminMutation = trpc.superadmin.assignGroupAdmin.useMutation();
-  const deletePlayerMutation = trpc.superadmin.deletePlayer.useMutation();
+  const setupRealtimeSubscriptions = useCallback(() => {
+    const groupsChannel = supabase
+      .channel('superadmin-groups')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, () => {
+        loadGroups();
+        loadStats();
+      })
+      .subscribe();
 
-  const onRefresh = useCallback(async () => {
-    await Promise.all([
-      statsQuery.refetch(),
-      groupsQuery.refetch(),
-      playersQuery.refetch(),
-      matchesQuery.refetch(),
-      competitionsQuery.refetch(),
-    ]);
-  }, [statsQuery, groupsQuery, playersQuery, matchesQuery, competitionsQuery]);
+    const playersChannel = supabase
+      .channel('superadmin-players')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => {
+        loadPlayers();
+        loadStats();
+      })
+      .subscribe();
 
-  const handleDeleteGroup = (groupId: string, groupName: string) => {
-    const confirmAction = () => {
-      Alert.alert(
-        'Delete Group',
-        `Are you sure you want to delete "${groupName}"? This will delete all competitions, matches, and memberships.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await deleteGroupMutation.mutateAsync({ groupId });
-                Alert.alert('Success', 'Group deleted successfully');
-                await onRefresh();
-              } catch (error) {
-                Alert.alert('Error', error instanceof Error ? error.message : 'Failed to delete group');
-              }
-            }
-          }
-        ]
-      );
+    const matchesChannel = supabase
+      .channel('superadmin-matches')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, () => {
+        loadMatches();
+        loadStats();
+      })
+      .subscribe();
+
+    const competitionsChannel = supabase
+      .channel('superadmin-competitions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, () => {
+        loadCompetitions();
+        loadStats();
+      })
+      .subscribe();
+
+    const joinRequestsChannel = supabase
+      .channel('superadmin-join-requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'join_requests' }, () => {
+        loadJoinRequests();
+      })
+      .subscribe();
+
+    const membersChannel = supabase
+      .channel('superadmin-members')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, () => {
+        loadGroups();
+      })
+      .subscribe();
+
+    return () => {
+      groupsChannel.unsubscribe();
+      playersChannel.unsubscribe();
+      matchesChannel.unsubscribe();
+      competitionsChannel.unsubscribe();
+      joinRequestsChannel.unsubscribe();
+      membersChannel.unsubscribe();
     };
+  }, []);
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Are you sure you want to delete "${groupName}"? This will delete all competitions, matches, and memberships.`)) {
-        deleteGroupMutation.mutateAsync({ groupId }).then(() => {
-          alert('Group deleted successfully');
-          onRefresh();
-        }).catch((error) => {
-          alert(error instanceof Error ? error.message : 'Failed to delete group');
-        });
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadAllData();
+      const unsubscribe = setupRealtimeSubscriptions();
+      return unsubscribe;
+    }
+  }, [isAuthenticated, loadAllData, setupRealtimeSubscriptions]);
+
+  const checkAuth = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        const { data: player } = await supabase
+          .from('players')
+          .select('role')
+          .eq('email', session.user.email)
+          .single();
+
+        if (player?.role === 'super_admin') {
+          setIsAuthenticated(true);
+        }
       }
-    } else {
-      confirmAction();
+    } catch (error) {
+      console.error('Auth check error:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleRemoveUser = (groupId: string, playerId: string, playerName: string, groupName: string) => {
-    const confirmAction = () => {
-      Alert.alert(
-        'Remove User',
-        `Remove ${playerName} from ${groupName}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Remove',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await removeUserMutation.mutateAsync({ groupId, playerId });
-                Alert.alert('Success', 'User removed successfully');
-                await onRefresh();
-              } catch (error) {
-                Alert.alert('Error', error instanceof Error ? error.message : 'Failed to remove user');
-              }
-            }
-          }
-        ]
-      );
-    };
+  const handleLogin = async () => {
+    setLoginError('');
+    setIsLoading(true);
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Remove ${playerName} from ${groupName}?`)) {
-        removeUserMutation.mutateAsync({ groupId, playerId }).then(() => {
-          alert('User removed successfully');
-          onRefresh();
-        }).catch((error) => {
-          alert(error instanceof Error ? error.message : 'Failed to remove user');
-        });
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      const { data: player, error: playerError } = await supabase
+        .from('players')
+        .select('role')
+        .eq('email', email)
+        .single();
+
+      if (playerError) throw playerError;
+
+      if (player?.role !== 'super_admin') {
+        await supabase.auth.signOut();
+        throw new Error('Access denied. Super admin privileges required.');
       }
-    } else {
-      confirmAction();
+
+      setIsAuthenticated(true);
+    } catch (error: any) {
+      setLoginError(error.message || 'Login failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleDeleteMatch = (matchId: string) => {
-    const confirmAction = () => {
-      Alert.alert(
-        'Delete Match',
-        'Are you sure you want to delete this match?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await deleteMatchMutation.mutateAsync({ matchId });
-                Alert.alert('Success', 'Match deleted successfully');
-                await onRefresh();
-              } catch (error) {
-                Alert.alert('Error', error instanceof Error ? error.message : 'Failed to delete match');
-              }
-            }
-          }
-        ]
-      );
-    };
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+    setEmail('');
+    setPassword('');
+  };
 
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to delete this match?')) {
-        deleteMatchMutation.mutateAsync({ matchId }).then(() => {
-          alert('Match deleted successfully');
-          onRefresh();
-        }).catch((error) => {
-          alert(error instanceof Error ? error.message : 'Failed to delete match');
+  const loadStats = async () => {
+    try {
+      const [playersRes, groupsRes, matchesRes, competitionsRes] = await Promise.all([
+        supabase.from('players').select('id', { count: 'exact', head: true }),
+        supabase.from('groups').select('id', { count: 'exact', head: true }),
+        supabase.from('matches').select('id, status', { count: 'exact' }),
+        supabase.from('competitions').select('id', { count: 'exact', head: true }),
+      ]);
+
+      const completedMatches = matchesRes.data?.filter(m => m.status === 'completed').length || 0;
+      const liveMatches = matchesRes.data?.filter(m => m.status === 'live').length || 0;
+
+      setStats({
+        totalPlayers: playersRes.count || 0,
+        totalGroups: groupsRes.count || 0,
+        activeGroups: groupsRes.count || 0,
+        totalMatches: matchesRes.count || 0,
+        completedMatches,
+        totalCompetitions: competitionsRes.count || 0,
+        liveMatches,
+      });
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
+
+  const loadGroups = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('groups')
+        .select(`
+          id,
+          name,
+          description,
+          admin_id,
+          admin:players!groups_admin_id_fkey(name),
+          members:group_members(
+            id,
+            player:players(id, name)
+          ),
+          competitions(id)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setGroups(data || []);
+    } catch (error) {
+      console.error('Error loading groups:', error);
+    }
+  };
+
+  const loadPlayers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .select(`
+          id,
+          name,
+          email,
+          gamer_handle,
+          role,
+          group_memberships:group_members(id)
+        `)
+        .order('joined_at', { ascending: false });
+
+      if (error) throw error;
+      setPlayers(data || []);
+    } catch (error) {
+      console.error('Error loading players:', error);
+    }
+  };
+
+  const loadMatches = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('matches')
+        .select(`
+          id,
+          status,
+          home_score,
+          away_score,
+          home_player:players!matches_home_player_id_fkey(name),
+          away_player:players!matches_away_player_id_fkey(name),
+          competition:competitions(
+            name,
+            group:groups(name)
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      setMatches(data || []);
+    } catch (error) {
+      console.error('Error loading matches:', error);
+    }
+  };
+
+  const loadCompetitions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('competitions')
+        .select(`
+          id,
+          name,
+          type,
+          status,
+          group:groups(name),
+          matches(id),
+          participants:competition_participants(id)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCompetitions(data || []);
+    } catch (error) {
+      console.error('Error loading competitions:', error);
+    }
+  };
+
+  const loadJoinRequests = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('join_requests')
+        .select(`
+          id,
+          player_id,
+          player_name,
+          group_id,
+          requested_at,
+          group:groups(name)
+        `)
+        .eq('status', 'pending')
+        .order('requested_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedRequests = (data || []).map(req => ({
+        id: req.id,
+        player_id: req.player_id,
+        player_name: req.player_name,
+        group_id: req.group_id,
+        groupName: (req.group as any)?.name || 'Unknown',
+        requested_at: req.requested_at,
+      }));
+
+      setJoinRequests(formattedRequests);
+    } catch (error) {
+      console.error('Error loading join requests:', error);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string, groupName: string) => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Are you sure you want to delete "${groupName}"? This will delete all competitions, matches, and memberships.`)
+      : await new Promise(resolve => {
+          Alert.alert(
+            'Delete Group',
+            `Are you sure you want to delete "${groupName}"? This will delete all competitions, matches, and memberships.`,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }
+            ]
+          );
         });
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('groups').delete().eq('id', groupId);
+      if (error) throw error;
+
+      if (Platform.OS === 'web') {
+        alert('Group deleted successfully');
+      } else {
+        Alert.alert('Success', 'Group deleted successfully');
       }
-    } else {
-      confirmAction();
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || 'Failed to delete group');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to delete group');
+      }
+    }
+  };
+
+  const handleRemoveUser = async (groupId: string, playerId: string, playerName: string, groupName: string) => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Remove ${playerName} from ${groupName}?`)
+      : await new Promise(resolve => {
+          Alert.alert(
+            'Remove User',
+            `Remove ${playerName} from ${groupName}?`,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('player_id', playerId);
+
+      if (error) throw error;
+
+      if (Platform.OS === 'web') {
+        alert('User removed successfully');
+      } else {
+        Alert.alert('Success', 'User removed successfully');
+      }
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || 'Failed to remove user');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to remove user');
+      }
+    }
+  };
+
+  const handleDeleteMatch = async (matchId: string) => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('Are you sure you want to delete this match?')
+      : await new Promise(resolve => {
+          Alert.alert(
+            'Delete Match',
+            'Are you sure you want to delete this match?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('matches').delete().eq('id', matchId);
+      if (error) throw error;
+
+      if (Platform.OS === 'web') {
+        alert('Match deleted successfully');
+      } else {
+        Alert.alert('Success', 'Match deleted successfully');
+      }
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || 'Failed to delete match');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to delete match');
+      }
     }
   };
 
   const handleCorrectScore = async () => {
     try {
-      await correctScoreMutation.mutateAsync({
-        matchId: correctScoreModal.matchId,
-        homeScore: correctScoreModal.homeScore,
-        awayScore: correctScoreModal.awayScore,
-      });
-      Alert.alert('Success', 'Score corrected successfully');
+      const { error } = await supabase
+        .from('matches')
+        .update({
+          home_score: correctScoreModal.homeScore,
+          away_score: correctScoreModal.awayScore,
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', correctScoreModal.matchId);
+
+      if (error) throw error;
+
       setCorrectScoreModal({ visible: false, matchId: '', homeScore: 0, awayScore: 0 });
-      await onRefresh();
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to correct score');
+
+      if (Platform.OS === 'web') {
+        alert('Score corrected successfully');
+      } else {
+        Alert.alert('Success', 'Score corrected successfully');
+      }
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || 'Failed to correct score');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to correct score');
+      }
     }
   };
 
   const handleManageRequest = async (requestId: string, action: 'approve' | 'reject') => {
     try {
-      await manageRequestMutation.mutateAsync({ requestId, action });
-      Alert.alert('Success', `Request ${action}d successfully`);
-      await onRefresh();
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : `Failed to ${action} request`);
+      const request = joinRequests.find(r => r.id === requestId);
+      if (!request) return;
+
+      if (action === 'approve') {
+        const { error: memberError } = await supabase
+          .from('group_members')
+          .insert({
+            group_id: request.group_id,
+            player_id: request.player_id,
+          });
+
+        if (memberError) throw memberError;
+      }
+
+      const { error: updateError } = await supabase
+        .from('join_requests')
+        .update({ status: action === 'approve' ? 'approved' : 'rejected' })
+        .eq('id', requestId);
+
+      if (updateError) throw updateError;
+
+      if (Platform.OS === 'web') {
+        alert(`Request ${action}d successfully`);
+      } else {
+        Alert.alert('Success', `Request ${action}d successfully`);
+      }
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || `Failed to ${action} request`);
+      } else {
+        Alert.alert('Error', error.message || `Failed to ${action} request`);
+      }
     }
   };
 
-  const handleDeleteCompetition = (competitionId: string, competitionName: string) => {
-    const confirmAction = () => {
-      Alert.alert(
-        'Delete Competition',
-        `Delete "${competitionName}"? This will delete all matches.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await deleteCompetitionMutation.mutateAsync({ competitionId });
-                Alert.alert('Success', 'Competition deleted successfully');
-                await onRefresh();
-              } catch (error) {
-                Alert.alert('Error', error instanceof Error ? error.message : 'Failed to delete competition');
-              }
-            }
-          }
-        ]
-      );
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Delete "${competitionName}"? This will delete all matches.`)) {
-        deleteCompetitionMutation.mutateAsync({ competitionId }).then(() => {
-          alert('Competition deleted successfully');
-          onRefresh();
-        }).catch((error) => {
-          alert(error instanceof Error ? error.message : 'Failed to delete competition');
+  const handleDeleteCompetition = async (competitionId: string, competitionName: string) => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Delete "${competitionName}"? This will delete all matches.`)
+      : await new Promise(resolve => {
+          Alert.alert(
+            'Delete Competition',
+            `Delete "${competitionName}"? This will delete all matches.`,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }
+            ]
+          );
         });
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('competitions').delete().eq('id', competitionId);
+      if (error) throw error;
+
+      if (Platform.OS === 'web') {
+        alert('Competition deleted successfully');
+      } else {
+        Alert.alert('Success', 'Competition deleted successfully');
       }
-    } else {
-      confirmAction();
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || 'Failed to delete competition');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to delete competition');
+      }
     }
   };
 
-  const handleAssignAdmin = (groupId: string, playerId: string, playerName: string, groupName: string) => {
-    const confirmAction = () => {
-      Alert.alert(
-        'Assign Admin',
-        `Make ${playerName} admin of ${groupName}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Assign',
-            onPress: async () => {
-              try {
-                await assignAdminMutation.mutateAsync({ groupId, playerId });
-                Alert.alert('Success', 'Admin assigned successfully');
-                await onRefresh();
-              } catch (error) {
-                Alert.alert('Error', error instanceof Error ? error.message : 'Failed to assign admin');
-              }
-            }
-          }
-        ]
-      );
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Make ${playerName} admin of ${groupName}?`)) {
-        assignAdminMutation.mutateAsync({ groupId, playerId }).then(() => {
-          alert('Admin assigned successfully');
-          onRefresh();
-        }).catch((error) => {
-          alert(error instanceof Error ? error.message : 'Failed to assign admin');
+  const handleAssignAdmin = async (groupId: string, playerId: string, playerName: string, groupName: string) => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Make ${playerName} admin of ${groupName}?`)
+      : await new Promise(resolve => {
+          Alert.alert(
+            'Assign Admin',
+            `Make ${playerName} admin of ${groupName}?`,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Assign', onPress: () => resolve(true) }
+            ]
+          );
         });
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from('groups')
+        .update({ admin_id: playerId })
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      if (Platform.OS === 'web') {
+        alert('Admin assigned successfully');
+      } else {
+        Alert.alert('Success', 'Admin assigned successfully');
       }
-    } else {
-      confirmAction();
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || 'Failed to assign admin');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to assign admin');
+      }
     }
   };
 
-  const handleDeletePlayer = (playerId: string, playerName: string) => {
-    const confirmAction = () => {
-      Alert.alert(
-        'Delete Player',
-        `Delete ${playerName}? This will:\n• Delete their auth account\n• Remove them from all groups\n• Delete their stats\n• Orphan their matches (matches will remain but show as deleted player)`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await deletePlayerMutation.mutateAsync({ playerId });
-                Alert.alert('Success', 'Player deleted successfully');
-                await onRefresh();
-              } catch (error) {
-                Alert.alert('Error', error instanceof Error ? error.message : 'Failed to delete player');
-              }
-            }
-          }
-        ]
-      );
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Delete ${playerName}? This will delete their auth account, remove them from all groups, and delete their stats. Matches will remain but show as deleted player.`)) {
-        deletePlayerMutation.mutateAsync({ playerId }).then(() => {
-          alert('Player deleted successfully');
-          onRefresh();
-        }).catch((error) => {
-          alert(error instanceof Error ? error.message : 'Failed to delete player');
+  const handleDeletePlayer = async (playerId: string, playerName: string) => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Delete ${playerName}? This will delete their auth account, remove them from all groups, and delete their stats. Matches will remain but show as deleted player.`)
+      : await new Promise(resolve => {
+          Alert.alert(
+            'Delete Player',
+            `Delete ${playerName}? This will:\n• Delete their auth account\n• Remove them from all groups\n• Delete their stats\n• Orphan their matches (matches will remain but show as deleted player)`,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }
+            ]
+          );
         });
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('players').delete().eq('id', playerId);
+      if (error) throw error;
+
+      if (Platform.OS === 'web') {
+        alert('Player deleted successfully');
+      } else {
+        Alert.alert('Success', 'Player deleted successfully');
       }
-    } else {
-      confirmAction();
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || 'Failed to delete player');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to delete player');
+      }
     }
+  };
+
+  const getAdminName = (admin: any) => {
+    if (!admin) return 'Unknown';
+    if (Array.isArray(admin)) return admin[0]?.name || 'Unknown';
+    return admin.name || 'Unknown';
+  };
+
+  const getPlayerInfo = (player: any) => {
+    if (!player) return { id: '', name: 'Unknown' };
+    if (Array.isArray(player)) return { id: player[0]?.id || '', name: player[0]?.name || 'Unknown' };
+    return { id: player.id || '', name: player.name || 'Unknown' };
+  };
+
+  const getGroupName = (group: any) => {
+    if (!group) return 'Unknown';
+    if (Array.isArray(group)) return group[0]?.name || 'Unknown';
+    return group.name || 'Unknown';
+  };
+
+  const getCompetitionInfo = (competition: any) => {
+    if (!competition) return { name: 'Unknown', groupName: 'Unknown' };
+    if (Array.isArray(competition)) {
+      const comp = competition[0];
+      return {
+        name: comp?.name || 'Unknown',
+        groupName: getGroupName(comp?.group)
+      };
+    }
+    return {
+      name: competition.name || 'Unknown',
+      groupName: getGroupName(competition.group)
+    };
   };
 
   const filteredGroups = useMemo(() => {
-    if (!groupsQuery.data?.data) return [];
-    if (!searchQuery) return groupsQuery.data.data;
-    return groupsQuery.data.data.filter((group: any) =>
+    if (!searchQuery) return groups;
+    return groups.filter(group =>
       group.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [groupsQuery.data, searchQuery]);
+  }, [groups, searchQuery]);
 
   const filteredPlayers = useMemo(() => {
-    if (!playersQuery.data?.data) return [];
-    if (!searchQuery) return playersQuery.data.data;
-    return playersQuery.data.data.filter((player: any) =>
+    if (!searchQuery) return players;
+    return players.filter(player =>
       player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       player.email?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [playersQuery.data, searchQuery]);
+  }, [players, searchQuery]);
 
   const filteredMatches = useMemo(() => {
-    if (!matchesQuery.data?.data) return [];
-    if (!searchQuery) return matchesQuery.data.data;
-    return matchesQuery.data.data.filter((match: any) =>
-      match.home_player?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      match.away_player?.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [matchesQuery.data, searchQuery]);
+    if (!searchQuery) return matches;
+    return matches.filter(match => {
+      const homeName = getPlayerInfo(match.home_player).name;
+      const awayName = getPlayerInfo(match.away_player).name;
+      return homeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        awayName.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+  }, [matches, searchQuery]);
 
   const filteredCompetitions = useMemo(() => {
-    if (!competitionsQuery.data?.data) return [];
-    if (!searchQuery) return competitionsQuery.data.data;
-    return competitionsQuery.data.data.filter((comp: any) =>
+    if (!searchQuery) return competitions;
+    return competitions.filter(comp =>
       comp.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [competitionsQuery.data, searchQuery]);
-
-  const allPendingRequests = useMemo(() => {
-    if (!groupsQuery.data?.data) return [];
-    return groupsQuery.data.data.flatMap((group: any) =>
-      (group.pending_members || []).map((req: any) => ({
-        ...req,
-        groupName: group.name,
-        groupId: group.id,
-      }))
-    );
-  }, [groupsQuery.data]);
+  }, [competitions, searchQuery]);
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview', icon: Eye },
@@ -414,258 +741,197 @@ export default function SuperAdminScreen() {
     { id: 'requests' as const, label: 'Requests', icon: UserCog },
   ];
 
-  const renderOverview = () => {
-    const stats = statsQuery.data?.data;
-    
-    console.log('📊 Stats Query:', {
-      isLoading: statsQuery.isLoading,
-      isError: statsQuery.isError,
-      error: statsQuery.error,
-      data: statsQuery.data,
-    });
-    
-    if (statsQuery.isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading statistics...</Text>
-        </View>
-      );
-    }
-    
-    if (statsQuery.isError) {
-      return (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Error: {statsQuery.error?.message || 'Failed to load stats'}</Text>
-          <TouchableOpacity style={styles.refreshButton} onPress={() => statsQuery.refetch()}>
-            <RefreshCw size={20} color="#3B82F6" />
-            <Text style={styles.refreshButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
+  const renderOverview = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <Text style={styles.sectionTitle}>Platform Statistics</Text>
+      <View style={styles.statsGrid}>
+        <StatCard
+          icon={Users}
+          title="Total Players"
+          value={stats.totalPlayers}
+          subtitle="Registered users"
+          color="#3B82F6"
+        />
+        <StatCard
+          icon={Crown}
+          title="Total Groups"
+          value={stats.totalGroups}
+          subtitle={`${stats.activeGroups} active`}
+          color="#10B981"
+        />
+        <StatCard
+          icon={Target}
+          title="Total Matches"
+          value={stats.totalMatches}
+          subtitle={`${stats.completedMatches} completed`}
+          color="#F59E0B"
+        />
+        <StatCard
+          icon={Trophy}
+          title="Competitions"
+          value={stats.totalCompetitions}
+          subtitle="All competitions"
+          color="#8B5CF6"
+        />
+      </View>
 
-    return (
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>Platform Statistics</Text>
-        <View style={styles.statsGrid}>
-          <StatCard
-            icon={Users}
-            title="Total Players"
-            value={stats?.totalPlayers || 0}
-            subtitle="Registered users"
-            color="#3B82F6"
-          />
-          <StatCard
-            icon={Crown}
-            title="Total Groups"
-            value={stats?.totalGroups || 0}
-            subtitle={`${stats?.activeGroups || 0} active`}
-            color="#10B981"
-          />
-          <StatCard
-            icon={Target}
-            title="Total Matches"
-            value={stats?.totalMatches || 0}
-            subtitle={`${stats?.completedMatches || 0} completed`}
-            color="#F59E0B"
-          />
-          <StatCard
-            icon={Trophy}
-            title="Competitions"
-            value={stats?.totalCompetitions || 0}
-            subtitle="All competitions"
-            color="#8B5CF6"
-          />
-        </View>
+      <View style={styles.statsGrid}>
+        <StatCard
+          icon={TrendingUp}
+          title="Live Matches"
+          value={stats.liveMatches}
+          color="#EF4444"
+        />
+        <StatCard
+          icon={Database}
+          title="Pending Requests"
+          value={joinRequests.length}
+          color="#F59E0B"
+        />
+      </View>
+    </ScrollView>
+  );
 
-        <View style={styles.statsGrid}>
-          <StatCard
-            icon={TrendingUp}
-            title="Live Matches"
-            value={stats?.liveMatches || 0}
-            color="#EF4444"
-          />
-          <StatCard
-            icon={Database}
-            title="Pending Requests"
-            value={allPendingRequests.length}
-            color="#F59E0B"
-          />
-        </View>
+  const renderGroups = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.searchContainer}>
+        <Search size={20} color="#6B7280" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search groups..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#9CA3AF"
+        />
+      </View>
 
-        <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
-          <RefreshCw size={20} color="#3B82F6" />
-          <Text style={styles.refreshButtonText}>Refresh All Data</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    );
-  };
-
-  const renderGroups = () => {
-    if (groupsQuery.isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading groups...</Text>
-        </View>
-      );
-    }
-
-    return (
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color="#6B7280" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search groups..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#9CA3AF"
-          />
-        </View>
-
-        <Text style={styles.sectionTitle}>All Groups ({filteredGroups.length})</Text>
-        {filteredGroups.map((group: any) => (
-          <View key={group.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{group.name}</Text>
-                <Text style={styles.cardSubtitle}>{group.description}</Text>
-                <Text style={styles.cardSubtitle}>
-                  Admin: {group.admin?.name || 'Unknown'}
-                </Text>
-                <Text style={styles.cardSubtitle}>
-                  Members: {group.members?.length || 0} | Competitions: {group.competitions?.length || 0}
-                </Text>
-              </View>
+      <Text style={styles.sectionTitle}>All Groups ({filteredGroups.length})</Text>
+      {filteredGroups.map((group) => (
+        <View key={group.id} style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{group.name}</Text>
+              <Text style={styles.cardSubtitle}>{group.description}</Text>
+              <Text style={styles.cardSubtitle}>
+                Admin: {getAdminName(group.admin)}
+              </Text>
+              <Text style={styles.cardSubtitle}>
+                Members: {group.members?.length || 0} | Competitions: {group.competitions?.length || 0}
+              </Text>
             </View>
+          </View>
 
-            {group.members && group.members.length > 0 && (
-              <View style={styles.membersList}>
-                <Text style={styles.membersTitle}>Members:</Text>
-                {group.members.map((member: any) => (
+          {group.members && group.members.length > 0 && (
+            <View style={styles.membersList}>
+              <Text style={styles.membersTitle}>Members:</Text>
+              {group.members.map((member: any) => {
+                const playerInfo = getPlayerInfo(member.player);
+                return (
                   <View key={member.id} style={styles.memberRow}>
-                    <Text style={styles.memberName}>{member.player?.name}</Text>
+                    <Text style={styles.memberName}>{playerInfo.name}</Text>
                     <View style={styles.memberActions}>
                       <TouchableOpacity
                         style={[styles.smallButton, styles.assignButton]}
-                        onPress={() => handleAssignAdmin(group.id, member.player.id, member.player.name, group.name)}
+                        onPress={() => handleAssignAdmin(group.id, playerInfo.id, playerInfo.name, group.name)}
                       >
                         <UserCog size={14} color="#fff" />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.smallButton, styles.removeButton]}
-                        onPress={() => handleRemoveUser(group.id, member.player.id, member.player.name, group.name)}
+                        onPress={() => handleRemoveUser(group.id, playerInfo.id, playerInfo.name, group.name)}
                       >
                         <UserX size={14} color="#fff" />
                       </TouchableOpacity>
                     </View>
                   </View>
-                ))}
-              </View>
-            )}
+                );
+              })}
+            </View>
+          )}
 
-            <View style={styles.adminActions}>
-              <TouchableOpacity
-                style={[styles.adminButton, styles.deleteButton]}
-                onPress={() => handleDeleteGroup(group.id, group.name)}
-              >
-                <Trash2 size={14} color="#fff" />
-                <Text style={styles.adminButtonText}>Delete Group</Text>
-              </TouchableOpacity>
+          <View style={styles.adminActions}>
+            <TouchableOpacity
+              style={[styles.adminButton, styles.deleteButton]}
+              onPress={() => handleDeleteGroup(group.id, group.name)}
+            >
+              <Trash2 size={14} color="#fff" />
+              <Text style={styles.adminButtonText}>Delete Group</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  );
+
+  const renderPlayers = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.searchContainer}>
+        <Search size={20} color="#6B7280" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search players..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#9CA3AF"
+        />
+      </View>
+
+      <Text style={styles.sectionTitle}>All Players ({filteredPlayers.length})</Text>
+      {filteredPlayers.map((player) => (
+        <View key={player.id} style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{player.name}</Text>
+              <Text style={styles.cardSubtitle}>{player.email}</Text>
+              <Text style={styles.cardSubtitle}>@{player.gamer_handle}</Text>
+              <Text style={styles.cardSubtitle}>
+                Groups: {player.group_memberships?.length || 0}
+              </Text>
             </View>
           </View>
-        ))}
-      </ScrollView>
-    );
-  };
 
-  const renderPlayers = () => {
-    if (playersQuery.isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading players...</Text>
-        </View>
-      );
-    }
-
-    return (
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color="#6B7280" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search players..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#9CA3AF"
-          />
-        </View>
-
-        <Text style={styles.sectionTitle}>All Players ({filteredPlayers.length})</Text>
-        {filteredPlayers.map((player: any) => (
-          <View key={player.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{player.name}</Text>
-                <Text style={styles.cardSubtitle}>{player.email}</Text>
-                <Text style={styles.cardSubtitle}>@{player.gamer_handle}</Text>
-                <Text style={styles.cardSubtitle}>
-                  Groups: {player.group_memberships?.length || 0}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.adminActions}>
-              <TouchableOpacity
-                style={[styles.adminButton, styles.deleteButton]}
-                onPress={() => handleDeletePlayer(player.id, player.name)}
-              >
-                <Trash2 size={14} color="#fff" />
-                <Text style={styles.adminButtonText}>Delete Player</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.adminActions}>
+            <TouchableOpacity
+              style={[styles.adminButton, styles.deleteButton]}
+              onPress={() => handleDeletePlayer(player.id, player.name)}
+            >
+              <Trash2 size={14} color="#fff" />
+              <Text style={styles.adminButtonText}>Delete Player</Text>
+            </TouchableOpacity>
           </View>
-        ))}
-      </ScrollView>
-    );
-  };
-
-  const renderMatches = () => {
-    if (matchesQuery.isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading matches...</Text>
         </View>
-      );
-    }
+      ))}
+    </ScrollView>
+  );
 
-    return (
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color="#6B7280" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search matches..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#9CA3AF"
-          />
-        </View>
+  const renderMatches = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.searchContainer}>
+        <Search size={20} color="#6B7280" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search matches..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#9CA3AF"
+        />
+      </View>
 
-        <Text style={styles.sectionTitle}>All Matches ({filteredMatches.length})</Text>
-        {filteredMatches.map((match: any) => (
+      <Text style={styles.sectionTitle}>All Matches ({filteredMatches.length})</Text>
+      {filteredMatches.map((match) => {
+        const homePlayer = getPlayerInfo(match.home_player);
+        const awayPlayer = getPlayerInfo(match.away_player);
+        const compInfo = getCompetitionInfo(match.competition);
+        
+        return (
           <View key={match.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>
-                  {match.home_player?.name || 'Unknown'} vs {match.away_player?.name || 'Unknown'}
+                  {homePlayer.name} vs {awayPlayer.name}
                 </Text>
                 <Text style={styles.cardSubtitle}>
-                  {match.competition?.group?.name} • {match.competition?.name}
+                  {compInfo.groupName} • {compInfo.name}
                 </Text>
                 <Text style={styles.cardSubtitle}>
                   Status: {match.status}
@@ -702,110 +968,97 @@ export default function SuperAdminScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        ))}
-      </ScrollView>
-    );
-  };
+        );
+      })}
+    </ScrollView>
+  );
 
-  const renderCompetitions = () => {
-    if (competitionsQuery.isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading competitions...</Text>
+  const renderCompetitions = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.searchContainer}>
+        <Search size={20} color="#6B7280" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search competitions..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#9CA3AF"
+        />
+      </View>
+
+      <Text style={styles.sectionTitle}>All Competitions ({filteredCompetitions.length})</Text>
+      {filteredCompetitions.map((comp) => (
+        <View key={comp.id} style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{comp.name}</Text>
+              <Text style={styles.cardSubtitle}>
+                {getGroupName(comp.group)} • {comp.type} • {comp.status}
+              </Text>
+              <Text style={styles.cardSubtitle}>
+                Matches: {comp.matches?.length || 0} | Participants: {comp.participants?.length || 0}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.adminActions}>
+            <TouchableOpacity
+              style={[styles.adminButton, styles.deleteButton]}
+              onPress={() => handleDeleteCompetition(comp.id, comp.name)}
+            >
+              <Trash2 size={14} color="#fff" />
+              <Text style={styles.adminButtonText}>Delete Competition</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      );
-    }
+      ))}
+    </ScrollView>
+  );
 
-    return (
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color="#6B7280" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search competitions..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#9CA3AF"
-          />
+  const renderRequests = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <Text style={styles.sectionTitle}>Pending Join Requests ({joinRequests.length})</Text>
+      {joinRequests.length === 0 ? (
+        <View style={styles.emptyState}>
+          <UserCog size={48} color="#9CA3AF" />
+          <Text style={styles.emptyStateText}>No pending requests</Text>
         </View>
-
-        <Text style={styles.sectionTitle}>All Competitions ({filteredCompetitions.length})</Text>
-        {filteredCompetitions.map((comp: any) => (
-          <View key={comp.id} style={styles.card}>
+      ) : (
+        joinRequests.map((request) => (
+          <View key={request.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{comp.name}</Text>
+                <Text style={styles.cardTitle}>{request.player_name}</Text>
                 <Text style={styles.cardSubtitle}>
-                  {comp.group?.name} • {comp.type} • {comp.status}
+                  Wants to join: {request.groupName}
                 </Text>
                 <Text style={styles.cardSubtitle}>
-                  Matches: {comp.matches?.length || 0} | Participants: {comp.participants?.length || 0}
+                  Requested: {new Date(request.requested_at).toLocaleString()}
                 </Text>
               </View>
             </View>
 
             <View style={styles.adminActions}>
               <TouchableOpacity
-                style={[styles.adminButton, styles.deleteButton]}
-                onPress={() => handleDeleteCompetition(comp.id, comp.name)}
+                style={[styles.adminButton, styles.approveButton]}
+                onPress={() => handleManageRequest(request.id, 'approve')}
               >
-                <Trash2 size={14} color="#fff" />
-                <Text style={styles.adminButtonText}>Delete Competition</Text>
+                <CheckCircle size={14} color="#fff" />
+                <Text style={styles.adminButtonText}>Approve</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.adminButton, styles.rejectButton]}
+                onPress={() => handleManageRequest(request.id, 'reject')}
+              >
+                <XCircle size={14} color="#fff" />
+                <Text style={styles.adminButtonText}>Reject</Text>
               </TouchableOpacity>
             </View>
           </View>
-        ))}
-      </ScrollView>
-    );
-  };
-
-  const renderRequests = () => {
-    return (
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>Pending Join Requests ({allPendingRequests.length})</Text>
-        {allPendingRequests.length === 0 ? (
-          <View style={styles.emptyState}>
-            <UserCog size={48} color="#9CA3AF" />
-            <Text style={styles.emptyStateText}>No pending requests</Text>
-          </View>
-        ) : (
-          allPendingRequests.map((request: any) => (
-            <View key={request.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{request.player_name}</Text>
-                  <Text style={styles.cardSubtitle}>
-                    Wants to join: {request.groupName}
-                  </Text>
-                  <Text style={styles.cardSubtitle}>
-                    Requested: {new Date(request.requested_at).toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.adminActions}>
-                <TouchableOpacity
-                  style={[styles.adminButton, styles.approveButton]}
-                  onPress={() => handleManageRequest(request.id, 'approve')}
-                >
-                  <CheckCircle size={14} color="#fff" />
-                  <Text style={styles.adminButtonText}>Approve</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.adminButton, styles.rejectButton]}
-                  onPress={() => handleManageRequest(request.id, 'reject')}
-                >
-                  <XCircle size={14} color="#fff" />
-                  <Text style={styles.adminButtonText}>Reject</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
-        )}
-      </ScrollView>
-    );
-  };
+        ))
+      )}
+    </ScrollView>
+  );
 
   const renderContent = () => {
     switch (activeTab) {
@@ -819,25 +1072,74 @@ export default function SuperAdminScreen() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.loginContainer}>
+          <Shield size={64} color="#F59E0B" />
+          <Text style={styles.loginTitle}>Super Admin Login</Text>
+          <Text style={styles.loginSubtitle}>Enter your credentials to access the admin panel</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholderTextColor="#64748B"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholderTextColor="#64748B"
+          />
+
+          {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
+
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={handleLogin}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.loginButtonText}>Login</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <Stack.Screen
-        options={{
-          title: 'Super Admin',
-          headerStyle: { backgroundColor: '#1F2937' },
-          headerTintColor: '#FFFFFF',
-          headerTitleStyle: { fontWeight: 'bold' as const },
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 16 }}>
-              <Text style={{ color: '#fff', fontSize: 16 }}>Back</Text>
-            </TouchableOpacity>
-          ),
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
         <Shield size={32} color="#F59E0B" />
         <Text style={styles.headerTitle}>Super Admin Dashboard</Text>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+          <LogOut size={20} color="#EF4444" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.tabBar}>
@@ -867,7 +1169,14 @@ export default function SuperAdminScreen() {
         </ScrollView>
       </View>
 
-      {renderContent()}
+      {dataLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading data...</Text>
+        </View>
+      ) : (
+        renderContent()
+      )}
 
       <Modal
         visible={correctScoreModal.visible}
@@ -931,6 +1240,56 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0F172A',
   },
+  loginContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loginTitle: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    color: '#fff',
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  loginSubtitle: {
+    fontSize: 16,
+    color: '#64748B',
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  input: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#fff',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  loginButton: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#fff',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    marginBottom: 16,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -939,9 +1298,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: '700' as const,
     color: '#fff',
+  },
+  logoutButton: {
+    padding: 8,
   },
   tabBar: {
     backgroundColor: '#1E293B',
@@ -1149,23 +1512,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600' as const,
     color: '#fff',
-  },
-  refreshButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#3B82F6',
-  },
-  refreshButtonText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#3B82F6',
   },
   emptyState: {
     alignItems: 'center',
