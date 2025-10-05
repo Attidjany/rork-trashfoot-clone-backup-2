@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -452,7 +453,12 @@ export default function MatchesScreen() {
                 style={styles.actionButton}
                 onPress={(e) => {
                   e.stopPropagation();
-                  // Open YouTube link
+                  if (match.youtubeLink) {
+                    Linking.openURL(match.youtubeLink).catch(err => {
+                      console.error('Failed to open YouTube link:', err);
+                      Alert.alert('Error', 'Failed to open YouTube link');
+                    });
+                  }
                 }}
               >
                 <Youtube size={16} color="#FF0000" />
