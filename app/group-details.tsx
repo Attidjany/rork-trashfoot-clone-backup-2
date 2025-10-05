@@ -9,6 +9,7 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { 
@@ -41,7 +42,7 @@ export default function GroupDetailsScreen() {
   const router = useRouter();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { user } = useSession();
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   
   const [activeTab, setActiveTab] = useState<'overview' | 'matches' | 'members'>('overview');
   const [createCompModal, setCreateCompModal] = useState(false);
@@ -106,6 +107,26 @@ export default function GroupDetailsScreen() {
   }, [groupId, user, groups]);
 
   const isAdmin = group && playerId && (group.adminId === playerId || group.adminIds?.includes(playerId));
+
+  const handleDeleteMatch = async (matchId: string) => {
+    try {
+      console.log('🗑️ Deleting match:', matchId);
+      const { error } = await supabase
+        .from('matches')
+        .delete()
+        .eq('id', matchId);
+      
+      if (error) {
+        console.error('❌ Error deleting match:', error);
+        Alert.alert('Error', 'Failed to delete match');
+      } else {
+        console.log('✅ Match deleted successfully, realtime will update UI');
+      }
+    } catch (error: any) {
+      console.error('❌ Error deleting match:', error);
+      Alert.alert('Error', error?.message || 'Failed to delete match');
+    }
+  };
 
   if (isLoading || groupsLoading) {
     return (
@@ -494,16 +515,24 @@ export default function GroupDetailsScreen() {
                   {(isAdmin || match.homePlayerId === playerId || match.awayPlayerId === playerId) && (
                     <TouchableOpacity
                       style={[styles.actionButton, styles.deleteButton]}
-                      onPress={async () => {
-                        const { error } = await supabase
-                          .from('matches')
-                          .delete()
-                          .eq('id', match.id);
-                        
-                        if (error) {
-                          alert('Failed to delete match');
+                      onPress={() => {
+                        if (Platform.OS === 'web') {
+                          if (window.confirm('Are you sure you want to delete this match?')) {
+                            handleDeleteMatch(match.id);
+                          }
                         } else {
-                          alert('Match deleted successfully');
+                          Alert.alert(
+                            'Delete Match',
+                            'Are you sure you want to delete this match?',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Delete',
+                                style: 'destructive',
+                                onPress: () => handleDeleteMatch(match.id),
+                              },
+                            ]
+                          );
                         }
                       }}
                     >
