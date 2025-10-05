@@ -9,12 +9,15 @@ import {
 } from 'react-native';
 import { Trophy, Target, Users, Table, ChevronDown, ChevronUp, Award } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Player } from '@/types/game';
 import { AchievementBadges } from '@/components/AchievementBadges';
 
 export default function StatsScreen() {
-  const { activeGroup, getHeadToHead, isLoading } = useGameStore();
+  const { activeGroupId } = useGameStore();
+  const { groups, isLoading } = useRealtimeGroups();
+  const activeGroup = groups.find(g => g.id === activeGroupId) || null;
   const [selectedTab, setSelectedTab] = useState<'leaderboard' | 'h2h' | 'table' | 'leagues'>('leaderboard');
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [showFullTable, setShowFullTable] = useState<{ [key: string]: boolean }>({});
@@ -119,14 +122,48 @@ export default function StatsScreen() {
   const h2hData = useMemo(() => {
     if (selectedPlayers.length === 2 && selectedPlayers[0] && selectedPlayers[1] && activeGroup) {
       console.log('🔍 Calculating H2H for players:', selectedPlayers[0], selectedPlayers[1]);
-      const result = getHeadToHead(selectedPlayers[0], selectedPlayers[1]);
+      
+      const allMatches = activeGroup.competitions.flatMap(c => c.matches);
+      const h2hMatches = allMatches.filter(m => 
+        m.status === 'completed' &&
+        ((m.homePlayerId === selectedPlayers[0] && m.awayPlayerId === selectedPlayers[1]) ||
+         (m.homePlayerId === selectedPlayers[1] && m.awayPlayerId === selectedPlayers[0]))
+      );
+
+      let player1Wins = 0;
+      let player2Wins = 0;
+      let draws = 0;
+      let totalGoals = 0;
+
+      h2hMatches.forEach(match => {
+        const p1IsHome = match.homePlayerId === selectedPlayers[0];
+        const p1Score = p1IsHome ? match.homeScore! : match.awayScore!;
+        const p2Score = p1IsHome ? match.awayScore! : match.homeScore!;
+        
+        totalGoals += p1Score + p2Score;
+        
+        if (p1Score > p2Score) player1Wins++;
+        else if (p2Score > p1Score) player2Wins++;
+        else draws++;
+      });
+
+      const result = {
+        player1Id: selectedPlayers[0],
+        player2Id: selectedPlayers[1],
+        player1Wins,
+        player2Wins,
+        draws,
+        totalGoals,
+        matches: h2hMatches,
+      };
+      
       console.log('📊 H2H result:', result);
       if (result && result.matches.length > 0) {
         return result;
       }
     }
     return null;
-  }, [selectedPlayers, getHeadToHead, activeGroup]);
+  }, [selectedPlayers, activeGroup]);
 
   if (isLoading) {
     return (
