@@ -335,7 +335,7 @@ export default function SuperAdminScreen() {
 
   const loadCompetitions = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('competitions')
         .select(`
           id,
@@ -345,10 +345,16 @@ export default function SuperAdminScreen() {
           group:groups(name),
           matches(id),
           participants:competition_participants(id)
-        `)
+        `, { count: 'exact' })
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      console.log('Competitions query result:', { data, error, count, dataLength: data?.length });
+      
+      if (error) {
+        console.error('Competitions query error:', error);
+        throw error;
+      }
+      
       setCompetitions(data || []);
     } catch (error) {
       console.error('Error loading competitions:', error);
