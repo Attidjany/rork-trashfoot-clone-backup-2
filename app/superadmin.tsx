@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -67,35 +67,27 @@ export default function SuperAdminScreen() {
 
   const { lastUpdate } = useRealtimeSuperadmin();
 
-  const statsQuery = trpc.superadmin.getPlatformStats.useQuery(undefined, {
-    refetchInterval: false,
-    refetchOnWindowFocus: false,
-  });
-  const groupsQuery = trpc.superadmin.getAllGroups.useQuery(undefined, {
-    refetchInterval: false,
-    refetchOnWindowFocus: false,
-  });
-  const playersQuery = trpc.superadmin.getAllPlayers.useQuery(undefined, {
-    refetchInterval: false,
-    refetchOnWindowFocus: false,
-  });
-  const matchesQuery = trpc.superadmin.getAllMatches.useQuery(undefined, {
-    refetchInterval: false,
-    refetchOnWindowFocus: false,
-  });
-  const competitionsQuery = trpc.superadmin.getAllCompetitions.useQuery(undefined, {
-    refetchInterval: false,
-    refetchOnWindowFocus: false,
-  });
+  const statsQuery = trpc.superadmin.getPlatformStats.useQuery();
+  const groupsQuery = trpc.superadmin.getAllGroups.useQuery();
+  const playersQuery = trpc.superadmin.getAllPlayers.useQuery();
+  const matchesQuery = trpc.superadmin.getAllMatches.useQuery();
+  const competitionsQuery = trpc.superadmin.getAllCompetitions.useQuery();
 
-  useEffect(() => {
-    console.log('🔄 Realtime update triggered, refetching all data');
+  const refetchAll = useCallback(() => {
+    console.log('🔄 Refetching all superadmin data');
     statsQuery.refetch();
     groupsQuery.refetch();
     playersQuery.refetch();
     matchesQuery.refetch();
     competitionsQuery.refetch();
-  }, [lastUpdate]);
+  }, [statsQuery, groupsQuery, playersQuery, matchesQuery, competitionsQuery]);
+
+  useEffect(() => {
+    if (lastUpdate > 0) {
+      console.log('🔄 Realtime update triggered');
+      refetchAll();
+    }
+  }, [lastUpdate, refetchAll]);
 
   const deleteGroupMutation = trpc.superadmin.deleteGroup.useMutation();
   const removeUserMutation = trpc.superadmin.removeUserFromGroup.useMutation();
@@ -106,7 +98,7 @@ export default function SuperAdminScreen() {
   const assignAdminMutation = trpc.superadmin.assignGroupAdmin.useMutation();
   const deletePlayerMutation = trpc.superadmin.deletePlayer.useMutation();
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     await Promise.all([
       statsQuery.refetch(),
       groupsQuery.refetch(),
@@ -114,7 +106,7 @@ export default function SuperAdminScreen() {
       matchesQuery.refetch(),
       competitionsQuery.refetch(),
     ]);
-  };
+  }, [statsQuery, groupsQuery, playersQuery, matchesQuery, competitionsQuery]);
 
   const handleDeleteGroup = (groupId: string, groupName: string) => {
     const confirmAction = () => {
@@ -425,11 +417,30 @@ export default function SuperAdminScreen() {
   const renderOverview = () => {
     const stats = statsQuery.data?.data;
     
+    console.log('📊 Stats Query:', {
+      isLoading: statsQuery.isLoading,
+      isError: statsQuery.isError,
+      error: statsQuery.error,
+      data: statsQuery.data,
+    });
+    
     if (statsQuery.isLoading) {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
           <Text style={styles.loadingText}>Loading statistics...</Text>
+        </View>
+      );
+    }
+    
+    if (statsQuery.isError) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Error: {statsQuery.error?.message || 'Failed to load stats'}</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => statsQuery.refetch()}>
+            <RefreshCw size={20} color="#3B82F6" />
+            <Text style={styles.refreshButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       );
     }
