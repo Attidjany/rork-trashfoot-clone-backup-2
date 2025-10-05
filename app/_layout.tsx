@@ -38,7 +38,14 @@ function RootLayoutNav() {
       <Stack.Screen name="admin" options={{ presentation: "modal" }} />
       <Stack.Screen name="super-admin-login" options={{ presentation: "modal" }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
-      <Stack.Screen name="settings" options={{ presentation: "modal" }} />
+      <Stack.Screen 
+        name="settings" 
+        options={{ 
+          presentation: "modal",
+          headerShown: true,
+          title: "Settings"
+        }} 
+      />
       <Stack.Screen name="group-details" options={{ presentation: "modal" }} />
       <Stack.Screen name="group-browser" options={{ presentation: "modal" }} />
     </Stack>

@@ -12,7 +12,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { 
   Bell, 
   Shield, 
@@ -222,7 +222,6 @@ export default function SettingsScreen() {
   if (groupsLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Stack.Screen options={{ title: 'Settings' }} />
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color="#0EA5E9" />
           <Text style={styles.emptyTitle}>Loading...</Text>
@@ -234,7 +233,6 @@ export default function SettingsScreen() {
   if (!user) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Stack.Screen options={{ title: 'Settings' }} />
         <View style={styles.emptyContainer}>
           <User size={64} color="#64748B" />
           <Text style={styles.emptyTitle}>Please login to access settings</Text>
@@ -254,13 +252,6 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen 
-        options={{ 
-          title: 'Settings',
-          headerStyle: { backgroundColor: '#0F172A' },
-          headerTintColor: '#fff',
-        }} 
-      />
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Profile Section */}
