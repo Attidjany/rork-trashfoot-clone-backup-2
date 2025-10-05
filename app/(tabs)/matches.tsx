@@ -28,7 +28,7 @@ export default function MatchesScreen() {
   const insets = useSafeAreaInsets();
   const { user, loading: sessionLoading } = useSession();
   const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups();
-  const { activeGroupId, shareYoutubeLink } = useGameStore();
+  const { activeGroupId } = useGameStore();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [currentPlayerId, setCurrentPlayerId] = React.useState<string | null>(null);
   
@@ -242,23 +242,48 @@ export default function MatchesScreen() {
     }
   };
 
-  const handleShareYoutube = () => {
+  const handleShareYoutube = async () => {
     if (!selectedMatch) return;
     
-    if (goLiveWithoutLink) {
-      // Go live without YouTube link
-      shareYoutubeLink(selectedMatch.id, '');
-    } else if (youtubeLink) {
-      // Go live with YouTube link
-      shareYoutubeLink(selectedMatch.id, youtubeLink);
-    } else {
-      return; // Need either link or checkbox
+    const link = goLiveWithoutLink ? '' : youtubeLink;
+    if (!goLiveWithoutLink && !youtubeLink) {
+      Alert.alert('Error', 'Please enter a YouTube link or check "Go live without YouTube link"');
+      return;
     }
     
-    setYoutubeModal(false);
-    setSelectedMatch(null);
-    setYoutubeLink('');
-    setGoLiveWithoutLink(false);
+    setIsSubmitting(true);
+    
+    try {
+      console.log('🔴 Going live:', { matchId: selectedMatch.id, youtubeLink: link });
+      
+      const { error } = await supabase
+        .from('matches')
+        .update({
+          youtube_link: link,
+          status: 'live',
+        })
+        .eq('id', selectedMatch.id);
+      
+      if (error) {
+        console.error('❌ Error updating match:', error);
+        throw new Error(error.message);
+      }
+      
+      console.log('✅ Match is now live');
+      Alert.alert('Success', 'Match is now live!');
+      
+      setYoutubeModal(false);
+      setSelectedMatch(null);
+      setYoutubeLink('');
+      setGoLiveWithoutLink(false);
+      
+      await refetchGroups();
+    } catch (error: any) {
+      console.error('❌ Error going live:', error);
+      Alert.alert('Error', error?.message || 'Failed to go live');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const renderTournament = (tournament: Competition) => {
@@ -664,10 +689,15 @@ export default function MatchesScreen() {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.submitButton}
+                style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
                 onPress={handleShareYoutube}
+                disabled={isSubmitting}
               >
-                <Text style={styles.submitButtonText}>Share</Text>
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Share</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
