@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  TextInput,
+  Modal,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { 
@@ -19,43 +22,148 @@ import {
   ChevronRight,
   Trash2,
   LogOut,
-  User
+  User,
+  Edit2,
+  CheckCircle,
+  XCircle,
+  Loader
 } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
 import { useTheme } from '@/hooks/use-theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
+import { trpc } from '@/lib/trpc';
+import { useSession } from '@/hooks/use-session';
+import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser } = useGameStore();
+  const { currentUser, updateProfile, activeGroupId } = useGameStore();
   const { theme, toggleTheme } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [editProfileModal, setEditProfileModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editGamerHandle, setEditGamerHandle] = useState('');
+  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null);
+  const [handleSuggestions, setHandleSuggestions] = useState<string[]>([]);
+  const [checkingHandle, setCheckingHandle] = useState(false);
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  
+  const { user } = useSession();
+  const { groups, refetch: refetchGroups } = useRealtimeGroups();
+  const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
+  
+  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
+  const currentPlayer = activeGroup?.members.find(m => m.email === user?.email);
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('Logging out...');
-              await supabase.auth.signOut();
-              console.log('Logged out successfully');
-              router.replace('/auth');
-            } catch (error) {
-              console.error('Error logging out:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          }
+  useEffect(() => {
+    if (editProfileModal) {
+      const fallbackName = currentPlayer?.name ?? currentUser?.name ?? (user?.email ? user.email.split('@')[0] : 'Player');
+      const fallbackHandle = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? fallbackName;
+      setEditName(currentPlayer?.name ?? fallbackName);
+      setEditGamerHandle(currentPlayer?.gamerHandle ?? fallbackHandle);
+    }
+  }, [editProfileModal, currentPlayer, currentUser, user]);
+
+  useEffect(() => {
+    const baseline = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '';
+    if (editProfileModal && editGamerHandle.length >= 3 && editGamerHandle !== baseline) {
+      const timeoutId = setTimeout(async () => {
+        setCheckingHandle(true);
+        try {
+          const result = await checkHandleMutation.mutateAsync({
+            gamerHandle: editGamerHandle.trim(),
+          });
+          setHandleAvailable(result.available);
+          setHandleSuggestions(result.available ? [] : result.suggestions || []);
+        } catch (error) {
+          console.error('Error checking handle:', error);
+          setHandleAvailable(null);
+          setHandleSuggestions([]);
+        } finally {
+          setCheckingHandle(false);
         }
-      ]
-    );
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    } else {
+      setHandleAvailable(null);
+      setHandleSuggestions([]);
+    }
+  }, [editGamerHandle, editProfileModal, currentPlayer, currentUser, checkHandleMutation]);
+
+  const handleUpdateProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+    if (!editGamerHandle.trim()) {
+      Alert.alert('Error', 'Please enter a gamer handle');
+      return;
+    }
+    const baseline = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '';
+    if (editGamerHandle !== baseline && handleAvailable === false) {
+      Alert.alert('Error', 'Gamer handle is not available');
+      return;
+    }
+
+    setIsUpdatingProfile(true);
+    try {
+      console.log('🔄 Updating profile...');
+      const result = await updateProfile(editName.trim(), editGamerHandle.trim());
+
+      console.log('✅ Profile update result:', result);
+
+      if (result.success) {
+        console.log('🔄 Refetching groups to get updated player data...');
+        await refetchGroups();
+        
+        Alert.alert('Success', 'Profile updated successfully!');
+        setEditProfileModal(false);
+        setEditName('');
+        setEditGamerHandle('');
+        setHandleAvailable(null);
+        setHandleSuggestions([]);
+      }
+    } catch (error: any) {
+      console.error('❌ Profile update error:', error);
+      Alert.alert('Error', error?.message || 'Failed to update profile');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleLogout = () => {
+    const performLogout = async () => {
+      try {
+        console.log('Logging out...');
+        await supabase.auth.signOut();
+        console.log('Logged out successfully');
+        router.replace('/auth');
+      } catch (error) {
+        console.error('Error logging out:', error);
+        Alert.alert('Error', 'Failed to logout. Please try again.');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to logout?')) {
+        performLogout();
+      }
+    } else {
+      Alert.alert(
+        'Logout',
+        'Are you sure you want to logout?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Logout', 
+            style: 'destructive',
+            onPress: performLogout
+          }
+        ]
+      );
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -146,17 +254,21 @@ export default function SettingsScreen() {
         {/* Profile Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Profile</Text>
-          <View style={styles.profileCard}>
+          <TouchableOpacity 
+            style={styles.profileCard}
+            onPress={() => setEditProfileModal(true)}
+          >
             <View style={styles.avatarContainer}>
               <User size={32} color="#fff" />
             </View>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{currentUser.name}</Text>
               <Text style={styles.profileSubtitle}>
-                Member since {new Date(currentUser.joinedAt).toLocaleDateString()}
+                @{currentPlayer?.gamerHandle ?? currentUser.gamerHandle}
               </Text>
             </View>
-          </View>
+            <Edit2 size={20} color="#0EA5E9" />
+          </TouchableOpacity>
         </View>
 
         {/* Preferences */}
@@ -267,6 +379,92 @@ export default function SettingsScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        visible={editProfileModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditProfileModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
+
+            <TextInput
+              style={styles.input}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Full Name"
+              placeholderTextColor="#64748B"
+              autoCapitalize="words"
+            />
+
+            <View
+              style={[
+                styles.handleInputContainer,
+                handleAvailable === false && styles.inputError,
+              ]}
+            >
+              <TextInput
+                style={styles.handleInput}
+                value={editGamerHandle}
+                onChangeText={setEditGamerHandle}
+                placeholder="Gamer Handle"
+                placeholderTextColor="#64748B"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {checkingHandle && <Loader size={20} color="#64748B" />}
+              {!checkingHandle &&
+                editGamerHandle !== (currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '') &&
+                handleAvailable === true && <CheckCircle size={20} color="#10B981" />}
+              {!checkingHandle &&
+                editGamerHandle !== (currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '') &&
+                handleAvailable === false && <XCircle size={20} color="#EF4444" />}
+            </View>
+
+            {handleAvailable === false && handleSuggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                <Text style={styles.suggestionsTitle}>Suggestions:</Text>
+                <View style={styles.suggestionsRow}>
+                  {handleSuggestions.map((suggestion, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.suggestionChip}
+                      onPress={() => setEditGamerHandle(suggestion)}
+                    >
+                      <Text style={styles.suggestionText}>{suggestion}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setEditProfileModal(false);
+                  setEditName('');
+                  setEditGamerHandle('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handleUpdateProfile}
+                disabled={isUpdatingProfile}
+              >
+                <Text style={styles.submitButtonText}>
+                  {isUpdatingProfile ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -321,6 +519,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     padding: 16,
     borderRadius: 12,
+    gap: 12,
   },
   avatarContainer: {
     width: 56,
@@ -376,5 +575,103 @@ const styles = StyleSheet.create({
   settingSubtitle: {
     fontSize: 14,
     color: '#64748B',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+    color: '#fff',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  input: {
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#fff',
+    marginBottom: 16,
+  },
+  handleInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  handleInput: {
+    flex: 1,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: '#fff',
+  },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+  suggestionsContainer: {
+    marginBottom: 16,
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  suggestionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  suggestionChip: {
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#0EA5E9',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#334155',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '500' as const,
+  },
+  submitButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#0EA5E9',
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600' as const,
   },
 });

@@ -20,10 +20,6 @@ import {
   Settings,
   ChevronRight,
   Search,
-  Edit2,
-  CheckCircle,
-  XCircle,
-  Loader,
 } from 'lucide-react-native';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -42,14 +38,13 @@ export default function ProfileScreen() {
     setActiveGroupId,
     activeGroupId,
     logout: logoutFromStore,
-    updateProfile,
     isHydrated,
   } = useGameStore();
 
   const { user, loading } = useSession();
   const signedIn = !!user;
   
-  const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups();
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
 
   useEffect(() => {
@@ -61,18 +56,10 @@ export default function ProfileScreen() {
 
   const [createGroupModal, setCreateGroupModal] = useState(false);
   const [joinGroupModal, setJoinGroupModal] = useState(false);
-  const [editProfileModal, setEditProfileModal] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [groupCode, setGroupCode] = useState('');
-  const [editName, setEditName] = useState('');
-  const [editGamerHandle, setEditGamerHandle] = useState('');
-  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null);
-  const [handleSuggestions, setHandleSuggestions] = useState<string[]>([]);
-  const [checkingHandle, setCheckingHandle] = useState(false);
 
-  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-  const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
   const joinGroupMutation = trpc.groups.join.useMutation();
 
   const currentPlayer = activeGroup?.members.find(m => m.email === user?.email);
@@ -103,38 +90,7 @@ export default function ProfileScreen() {
     currentUser?.joinedAt ??
     (user?.created_at ? user.created_at : new Date().toISOString());
 
-  useEffect(() => {
-    if (editProfileModal) {
-      setEditName(currentPlayer?.name ?? fallbackName);
-      setEditGamerHandle(currentPlayer?.gamerHandle ?? fallbackHandle);
-    }
-  }, [editProfileModal, currentPlayer, fallbackName, fallbackHandle]);
 
-  useEffect(() => {
-    const baseline = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '';
-    if (editProfileModal && editGamerHandle.length >= 3 && editGamerHandle !== baseline) {
-      const timeoutId = setTimeout(async () => {
-        setCheckingHandle(true);
-        try {
-          const result = await checkHandleMutation.mutateAsync({
-            gamerHandle: editGamerHandle.trim(),
-          });
-          setHandleAvailable(result.available);
-          setHandleSuggestions(result.available ? [] : result.suggestions || []);
-        } catch (error) {
-          console.error('Error checking handle:', error);
-          setHandleAvailable(null);
-          setHandleSuggestions([]);
-        } finally {
-          setCheckingHandle(false);
-        }
-      }, 500);
-      return () => clearTimeout(timeoutId);
-    } else {
-      setHandleAvailable(null);
-      setHandleSuggestions([]);
-    }
-  }, [editGamerHandle, editProfileModal, currentPlayer, currentUser, checkHandleMutation]);
 
   if (loading || groupsLoading || !isHydrated) {
     return (
@@ -269,46 +225,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleUpdateProfile = async () => {
-    if (!editName.trim()) {
-      Alert.alert('Error', 'Please enter your name');
-      return;
-    }
-    if (!editGamerHandle.trim()) {
-      Alert.alert('Error', 'Please enter a gamer handle');
-      return;
-    }
-    const baseline = currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '';
-    if (editGamerHandle !== baseline && handleAvailable === false) {
-      Alert.alert('Error', 'Gamer handle is not available');
-      return;
-    }
 
-    setIsUpdatingProfile(true);
-    try {
-      console.log('🔄 Updating profile...');
-      const result = await updateProfile(editName.trim(), editGamerHandle.trim());
-
-      console.log('✅ Profile update result:', result);
-
-      if (result.success) {
-        console.log('🔄 Refetching groups to get updated player data...');
-        await refetchGroups();
-        
-        Alert.alert('Success', 'Profile updated successfully!');
-        setEditProfileModal(false);
-        setEditName('');
-        setEditGamerHandle('');
-        setHandleAvailable(null);
-        setHandleSuggestions([]);
-      }
-    } catch (error: any) {
-      console.error('❌ Profile update error:', error);
-      Alert.alert('Error', error?.message || 'Failed to update profile');
-    } finally {
-      setIsUpdatingProfile(false);
-    }
-  };
 
   const handleLogout = () => {
     console.log('🔴 handleLogout called');
@@ -320,9 +237,7 @@ export default function ProfileScreen() {
         await logoutFromStore();
         console.log('✅ Logged out successfully');
         
-        setTimeout(() => {
-          router.replace('/auth');
-        }, 100);
+        router.replace('/auth');
       } catch (e: any) {
         console.error('❌ Logout error:', e);
         if (Platform.OS === 'web') {
@@ -380,14 +295,6 @@ export default function ProfileScreen() {
           <Text style={{ color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>
             {user?.email ? `Signed in as ${user.email}` : 'Signed in'}
           </Text>
-
-          <TouchableOpacity
-            style={styles.editProfileButton}
-            onPress={() => setEditProfileModal(true)}
-          >
-            <Edit2 size={14} color="#fff" />
-            <Text style={styles.editProfileText}>Edit Profile</Text>
-          </TouchableOpacity>
         </View>
 
         <AchievementBadges
@@ -641,91 +548,6 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-
-      <Modal
-        visible={editProfileModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEditProfileModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Profile</Text>
-
-            <TextInput
-              style={styles.input}
-              value={editName}
-              onChangeText={setEditName}
-              placeholder="Full Name"
-              placeholderTextColor="#64748B"
-              autoCapitalize="words"
-            />
-
-            <View
-              style={[
-                styles.handleInputContainer,
-                handleAvailable === false && styles.inputError,
-              ]}
-            >
-              <TextInput
-                style={styles.handleInput}
-                value={editGamerHandle}
-                onChangeText={setEditGamerHandle}
-                placeholder="Gamer Handle"
-                placeholderTextColor="#64748B"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {checkingHandle && <Loader size={20} color="#64748B" />}
-              {!checkingHandle &&
-                editGamerHandle !== (currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '') &&
-                handleAvailable === true && <CheckCircle size={20} color="#10B981" />}
-              {!checkingHandle &&
-                editGamerHandle !== (currentPlayer?.gamerHandle ?? currentUser?.gamerHandle ?? '') &&
-                handleAvailable === false && <XCircle size={20} color="#EF4444" />}
-            </View>
-
-            {handleAvailable === false && handleSuggestions.length > 0 && (
-              <View style={styles.suggestionsContainer}>
-                <Text style={styles.suggestionsTitle}>Suggestions:</Text>
-                <View style={styles.suggestionsRow}>
-                  {handleSuggestions.map((suggestion, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={styles.suggestionChip}
-                      onPress={() => setEditGamerHandle(suggestion)}
-                    >
-                      <Text style={styles.suggestionText}>{suggestion}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => {
-                  setEditProfileModal(false);
-                  setEditName('');
-                  setEditGamerHandle('');
-                }}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={handleUpdateProfile}
-                disabled={isUpdatingProfile}
-              >
-                <Text style={styles.submitButtonText}>
-                  {isUpdatingProfile ? 'Saving...' : 'Save'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -754,17 +576,6 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' as const },
   profileHeader: { padding: 24, alignItems: 'center' },
   profileNameContainer: { alignItems: 'center' },
-  editProfileButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginTop: 8,
-  },
-  editProfileText: { fontSize: 12, color: '#fff', fontWeight: '500' as const },
   avatarContainer: {
     width: 80,
     height: 80,
@@ -919,30 +730,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   infoText: { fontSize: 12, color: '#0EA5E9', lineHeight: 16 },
-  inputError: { borderColor: '#EF4444' },
-  handleInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  handleInput: { flex: 1, paddingVertical: 16, fontSize: 16, color: '#fff' },
-  suggestionsContainer: { marginBottom: 16 },
-  suggestionsTitle: { fontSize: 14, color: '#64748B', marginBottom: 8 },
-  suggestionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  suggestionChip: {
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  suggestionText: { fontSize: 14, color: '#0EA5E9' },
   groupCardWrapper: {
     marginBottom: 8,
   },

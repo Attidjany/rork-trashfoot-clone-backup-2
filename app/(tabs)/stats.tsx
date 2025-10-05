@@ -125,7 +125,10 @@ export default function StatsScreen() {
 
   const h2hData = useMemo(() => {
     if (selectedPlayers[0] && selectedPlayers[1] && activeGroup) {
-      return getHeadToHead(selectedPlayers[0], selectedPlayers[1]);
+      const result = getHeadToHead(selectedPlayers[0], selectedPlayers[1]);
+      if (result && result.matches.length > 0) {
+        return result;
+      }
     }
     return null;
   }, [selectedPlayers, getHeadToHead, activeGroup]);
