@@ -375,20 +375,6 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Admin Access */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Administration</Text>
-          <View style={styles.settingsGroup}>
-            <SettingItem
-              icon={Shield}
-              title="Super Admin Login"
-              subtitle="Platform administration access"
-              onPress={() => router.push('/super-admin-login')}
-              color="#F59E0B"
-            />
-          </View>
-        </View>
-
         {/* Danger Zone */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
