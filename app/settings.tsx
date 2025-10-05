@@ -10,6 +10,7 @@ import {
   TextInput,
   Modal,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { 
@@ -49,12 +50,12 @@ export default function SettingsScreen() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   
   const { user } = useSession();
-  const { groups } = useRealtimeGroups();
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
   const updateProfileMutation = trpc.auth.updateProfile.useMutation();
   
-  const firstGroup = groups[0];
-  const currentPlayer = firstGroup?.members.find(m => m.email === user?.email);
+  const firstGroup = groups.length > 0 ? groups[0] : null;
+  const currentPlayer = firstGroup?.members.find(m => m.email === user?.email) ?? null;
 
   useEffect(() => {
     if (editProfileModal) {
@@ -217,6 +218,18 @@ export default function SettingsScreen() {
       {rightElement || (onPress && <ChevronRight size={20} color="#64748B" />)}
     </TouchableOpacity>
   );
+
+  if (groupsLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Stack.Screen options={{ title: 'Settings' }} />
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#0EA5E9" />
+          <Text style={styles.emptyTitle}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
 
   if (!user) {
     return (

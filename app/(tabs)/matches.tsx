@@ -199,7 +199,7 @@ export default function MatchesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('🔄 Deleting match from database:', matchId);
+              console.log('🗑️ Deleting match from database:', matchId);
               const { error } = await supabase
                 .from('matches')
                 .delete()
@@ -211,9 +211,7 @@ export default function MatchesScreen() {
                 return;
               }
               
-              console.log('✅ Match deleted successfully');
-              Alert.alert('Success', 'Match deleted successfully');
-              await refetchGroups();
+              console.log('✅ Match deleted successfully, realtime will update UI');
             } catch (error: any) {
               console.error('❌ Error deleting match:', error);
               Alert.alert('Error', error?.message || 'Failed to delete match');
