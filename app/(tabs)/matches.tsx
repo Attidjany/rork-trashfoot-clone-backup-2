@@ -200,18 +200,21 @@ export default function MatchesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('🗑️ Deleting match directly via Supabase:', matchId);
-              const { error } = await supabase
+              console.log('🗑️ Deleting match via Supabase:', matchId);
+              const { data, error } = await supabase
                 .from('matches')
                 .delete()
-                .eq('id', matchId);
+                .eq('id', matchId)
+                .select();
               
               if (error) {
                 console.error('❌ Error deleting match:', error);
                 throw new Error(error.message);
               }
               
-              console.log('✅ Match deleted successfully, realtime will update UI');
+              console.log('✅ Match deleted successfully:', data);
+              console.log('🔄 Triggering manual refetch...');
+              await refetchGroups();
               Alert.alert('Success', 'Match deleted successfully');
             } catch (error: any) {
               console.error('❌ Error deleting match:', error);
