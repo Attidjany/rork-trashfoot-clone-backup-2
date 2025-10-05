@@ -12,16 +12,9 @@ import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Player } from '@/types/game';
 import { AchievementBadges } from '@/components/AchievementBadges';
-import { useSession } from '@/hooks/use-session';
-import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function StatsScreen() {
-  const { user, loading: sessionLoading } = useSession();
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
-  const { activeGroupId, getHeadToHead } = useGameStore();
-  
-  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
-  const isLoading = sessionLoading || groupsLoading;
+  const { activeGroup, getHeadToHead, isLoading } = useGameStore();
   const [selectedTab, setSelectedTab] = useState<'leaderboard' | 'h2h' | 'table' | 'leagues'>('leaderboard');
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [showFullTable, setShowFullTable] = useState<{ [key: string]: boolean }>({});
@@ -124,8 +117,10 @@ export default function StatsScreen() {
   }, [activeGroup, completedMatchesCount]);
 
   const h2hData = useMemo(() => {
-    if (selectedPlayers[0] && selectedPlayers[1] && activeGroup) {
+    if (selectedPlayers.length === 2 && selectedPlayers[0] && selectedPlayers[1] && activeGroup) {
+      console.log('🔍 Calculating H2H for players:', selectedPlayers[0], selectedPlayers[1]);
       const result = getHeadToHead(selectedPlayers[0], selectedPlayers[1]);
+      console.log('📊 H2H result:', result);
       if (result && result.matches.length > 0) {
         return result;
       }

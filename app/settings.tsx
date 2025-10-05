@@ -34,12 +34,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { trpc } from '@/lib/trpc';
 import { useSession } from '@/hooks/use-session';
-import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser, updateProfile, activeGroupId } = useGameStore();
+  const { currentUser, updateProfile, activeGroupId, groups, activeGroup } = useGameStore();
   const { theme, toggleTheme } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [editProfileModal, setEditProfileModal] = useState(false);
@@ -51,10 +50,8 @@ export default function SettingsScreen() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   
   const { user } = useSession();
-  const { groups, refetch: refetchGroups } = useRealtimeGroups();
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
   
-  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
   const currentPlayer = activeGroup?.members.find(m => m.email === user?.email);
 
   useEffect(() => {
@@ -115,9 +112,6 @@ export default function SettingsScreen() {
       console.log('✅ Profile update result:', result);
 
       if (result.success) {
-        console.log('🔄 Refetching groups to get updated player data...');
-        await refetchGroups();
-        
         Alert.alert('Success', 'Profile updated successfully!');
         setEditProfileModal(false);
         setEditName('');
