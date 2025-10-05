@@ -400,6 +400,11 @@ export default function ProfileScreen() {
                           <Text style={styles.activeBadgeText}>Active</Text>
                         </View>
                       )}
+                      {group.adminId === currentPlayer?.id && group.pendingRequestCount && group.pendingRequestCount > 0 && (
+                        <View style={styles.pendingBadge}>
+                          <Text style={styles.pendingBadgeText}>{group.pendingRequestCount} pending</Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.groupDescription}>
                       {group.description || 'No description'}
@@ -745,5 +750,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#fff',
     fontWeight: '600' as const,
+  },
+  pendingBadge: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#fff',
   },
 });

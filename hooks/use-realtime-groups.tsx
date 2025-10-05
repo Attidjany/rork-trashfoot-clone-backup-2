@@ -199,6 +199,20 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
         participantsByCompetition.get(p.competition_id)!.push(p.player_id);
       });
 
+      const pendingRequestCounts = new Map<string, number>();
+      if (player) {
+        const { data: pendingCounts } = await supabase
+          .from('pending_group_members')
+          .select('group_id')
+          .eq('status', 'pending')
+          .in('group_id', groupIds);
+        
+        (pendingCounts || []).forEach((pc: any) => {
+          const count = pendingRequestCounts.get(pc.group_id) || 0;
+          pendingRequestCounts.set(pc.group_id, count + 1);
+        });
+      }
+
       const groupsData: Group[] = groupMembers.map((gm: any) => {
         const groupId = gm.groups.id;
         const members = membersByGroup.get(groupId) || [];
@@ -261,6 +275,7 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
           inviteCode: gm.groups.invite_code,
           isPublic: gm.groups.is_public,
           pendingMembers: [],
+          pendingRequestCount: pendingRequestCounts.get(groupId) || 0,
         };
       });
 

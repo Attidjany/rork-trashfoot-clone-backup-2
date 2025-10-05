@@ -40,6 +40,7 @@ export interface Group {
   inviteCode: string;
   isPublic?: boolean;
   pendingMembers?: PendingMember[];
+  pendingRequestCount?: number;
 }
 
 export interface PendingMember {

@@ -84,7 +84,19 @@ export default function GroupBrowserScreen() {
 
       const userGroupIds = new Set(userGroups?.map((g: any) => g.group_id) || []);
       console.log('👤 User is member of', userGroupIds.size, 'groups');
-      const filteredGroups = (groups || []).filter((g: any) => !userGroupIds.has(g.id));
+      
+      const { data: pendingRequests } = await supabase
+        .from('pending_group_members')
+        .select('group_id, status')
+        .eq('player_id', player.id)
+        .eq('status', 'pending');
+      
+      const pendingGroupIds = new Set(pendingRequests?.map((r: any) => r.group_id) || []);
+      console.log('⏳ User has pending requests for', pendingGroupIds.size, 'groups');
+      
+      const filteredGroups = (groups || []).filter((g: any) => 
+        !userGroupIds.has(g.id) && !pendingGroupIds.has(g.id)
+      );
       console.log('🔍 Filtered to', filteredGroups.length, 'available groups');
 
       const groupsWithCounts = await Promise.all(
