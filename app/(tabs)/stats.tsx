@@ -123,6 +123,13 @@ export default function StatsScreen() {
     return [...activeGroup.members].sort((a, b) => b.stats.points - a.stats.points);
   }, [activeGroup, completedMatchesCount]);
 
+  const h2hData = useMemo(() => {
+    if (selectedPlayers[0] && selectedPlayers[1] && activeGroup) {
+      return getHeadToHead(selectedPlayers[0], selectedPlayers[1]);
+    }
+    return null;
+  }, [selectedPlayers, getHeadToHead, activeGroup]);
+
   if (isLoading) {
     return (
       <View style={styles.emptyContainer}>
@@ -140,10 +147,6 @@ export default function StatsScreen() {
       </View>
     );
   }
-  
-  const h2hData = selectedPlayers[0] && selectedPlayers[1] 
-    ? getHeadToHead(selectedPlayers[0], selectedPlayers[1])
-    : null;
 
   const renderPlayerCard = (player: Player, rank: number) => {
     const goalDiff = player.stats.goalsFor - player.stats.goalsAgainst;
@@ -617,50 +620,57 @@ export default function StatsScreen() {
             </View>
 
             {/* H2H Stats */}
-            {h2hData && selectedPlayers[0] && selectedPlayers[1] && (
+            {selectedPlayers.length === 2 && (
               <View style={styles.h2hContainer}>
-                <LinearGradient
-                  colors={['#1E293B', '#334155']}
-                  style={styles.h2hCard}
-                >
-                  <Text style={styles.h2hTitle}>Head to Head</Text>
-                  
-                  <View style={styles.h2hPlayers}>
-                    <View style={styles.h2hPlayer}>
-                      <Text style={styles.h2hPlayerName}>
-                        @{activeGroup.members.find(m => m.id === selectedPlayers[0])?.gamerHandle || 'Unknown'}
-                      </Text>
-                      <Text style={styles.h2hWins}>{h2hData.player1Wins}</Text>
-                      <Text style={styles.h2hWinsLabel}>Wins</Text>
+                {h2hData ? (
+                  <LinearGradient
+                    colors={['#1E293B', '#334155']}
+                    style={styles.h2hCard}
+                  >
+                    <Text style={styles.h2hTitle}>Head to Head</Text>
+                    
+                    <View style={styles.h2hPlayers}>
+                      <View style={styles.h2hPlayer}>
+                        <Text style={styles.h2hPlayerName}>
+                          @{activeGroup?.members.find(m => m.id === selectedPlayers[0])?.gamerHandle || 'Unknown'}
+                        </Text>
+                        <Text style={styles.h2hWins}>{h2hData.player1Wins}</Text>
+                        <Text style={styles.h2hWinsLabel}>Wins</Text>
+                      </View>
+                      
+                      <View style={styles.h2hCenter}>
+                        <Text style={styles.h2hDraws}>{h2hData.draws}</Text>
+                        <Text style={styles.h2hDrawsLabel}>Draws</Text>
+                      </View>
+                      
+                      <View style={styles.h2hPlayer}>
+                        <Text style={styles.h2hPlayerName}>
+                          @{activeGroup?.members.find(m => m.id === selectedPlayers[1])?.gamerHandle || 'Unknown'}
+                        </Text>
+                        <Text style={styles.h2hWins}>{h2hData.player2Wins}</Text>
+                        <Text style={styles.h2hWinsLabel}>Wins</Text>
+                      </View>
                     </View>
                     
-                    <View style={styles.h2hCenter}>
-                      <Text style={styles.h2hDraws}>{h2hData.draws}</Text>
-                      <Text style={styles.h2hDrawsLabel}>Draws</Text>
+                    <View style={styles.h2hStats}>
+                      <View style={styles.h2hStat}>
+                        <Target size={16} color="#0EA5E9" />
+                        <Text style={styles.h2hStatValue}>{h2hData.totalGoals}</Text>
+                        <Text style={styles.h2hStatLabel}>Total Goals</Text>
+                      </View>
+                      <View style={styles.h2hStat}>
+                        <Trophy size={16} color="#8B5CF6" />
+                        <Text style={styles.h2hStatValue}>{h2hData.matches.length}</Text>
+                        <Text style={styles.h2hStatLabel}>Matches Played</Text>
+                      </View>
                     </View>
-                    
-                    <View style={styles.h2hPlayer}>
-                      <Text style={styles.h2hPlayerName}>
-                        @{activeGroup.members.find(m => m.id === selectedPlayers[1])?.gamerHandle || 'Unknown'}
-                      </Text>
-                      <Text style={styles.h2hWins}>{h2hData.player2Wins}</Text>
-                      <Text style={styles.h2hWinsLabel}>Wins</Text>
-                    </View>
+                  </LinearGradient>
+                ) : (
+                  <View style={styles.emptyH2h}>
+                    <Users size={48} color="#64748B" />
+                    <Text style={styles.emptyH2hText}>No matches found between these players</Text>
                   </View>
-                  
-                  <View style={styles.h2hStats}>
-                    <View style={styles.h2hStat}>
-                      <Target size={16} color="#0EA5E9" />
-                      <Text style={styles.h2hStatValue}>{h2hData.totalGoals}</Text>
-                      <Text style={styles.h2hStatLabel}>Total Goals</Text>
-                    </View>
-                    <View style={styles.h2hStat}>
-                      <Trophy size={16} color="#8B5CF6" />
-                      <Text style={styles.h2hStatValue}>{h2hData.matches.length}</Text>
-                      <Text style={styles.h2hStatLabel}>Matches Played</Text>
-                    </View>
-                  </View>
-                </LinearGradient>
+                )}
               </View>
             )}
           </>
@@ -1166,6 +1176,18 @@ const styles = StyleSheet.create({
   noMatchesSubtext: {
     fontSize: 14,
     color: '#64748B',
+    textAlign: 'center',
+  },
+  emptyH2h: {
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyH2hText: {
+    fontSize: 16,
+    color: '#64748B',
+    marginTop: 16,
     textAlign: 'center',
   },
 });

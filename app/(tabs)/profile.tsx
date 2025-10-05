@@ -8,6 +8,7 @@ import {
   TextInput,
   Modal,
   Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -311,36 +312,53 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     console.log('🔴 handleLogout called');
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: () => console.log('🔴 Logout cancelled'),
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('🔓 Starting logout process...');
-              
-              await logoutFromStore();
-              console.log('✅ Logged out successfully');
-              
-              setTimeout(() => {
-                router.replace('/auth');
-              }, 100);
-            } catch (e: any) {
-              console.error('❌ Logout error:', e);
-              Alert.alert('Logout Error', e?.message ?? 'Failed to logout. Please try again.');
-            }
+    
+    const performLogout = async () => {
+      try {
+        console.log('🔓 Starting logout process...');
+        
+        await logoutFromStore();
+        console.log('✅ Logged out successfully');
+        
+        setTimeout(() => {
+          router.replace('/auth');
+        }, 100);
+      } catch (e: any) {
+        console.error('❌ Logout error:', e);
+        if (Platform.OS === 'web') {
+          if (window.confirm('Logout Error: ' + (e?.message ?? 'Failed to logout. Please try again.'))) {
+            // User acknowledged the error
+          }
+        } else {
+          Alert.alert('Logout Error', e?.message ?? 'Failed to logout. Please try again.');
+        }
+      }
+    };
+    
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to logout?')) {
+        performLogout();
+      } else {
+        console.log('🔴 Logout cancelled');
+      }
+    } else {
+      Alert.alert(
+        'Logout',
+        'Are you sure you want to logout?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => console.log('🔴 Logout cancelled'),
           },
-        },
-      ]
-    );
+          {
+            text: 'Logout',
+            style: 'destructive',
+            onPress: performLogout,
+          },
+        ]
+      );
+    }
   };
 
   return (
