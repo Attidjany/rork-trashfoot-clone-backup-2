@@ -191,32 +191,44 @@ export default function GroupBrowserScreen() {
         return;
       }
 
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .insert({
-          group_id: group.id,
-          player_id: player.id,
-          is_admin: false,
-        });
+      const { data: existingRequest } = await supabase
+        .from('pending_group_members')
+        .select('id, status')
+        .eq('group_id', group.id)
+        .eq('player_id', player.id)
+        .maybeSingle();
 
-      if (memberError) {
-        console.error('Error joining group:', memberError);
-        alert('Failed to join group');
+      if (existingRequest) {
+        alert('You already have a pending request for this group');
+        setJoinModal(false);
+        setSelectedGroup(null);
         return;
       }
 
-      await supabase
-        .from('player_stats')
+      const { data: playerData } = await supabase
+        .from('players')
+        .select('name')
+        .eq('id', player.id)
+        .single();
+
+      const { error: requestError } = await supabase
+        .from('pending_group_members')
         .insert({
-          player_id: player.id,
           group_id: group.id,
+          player_id: player.id,
+          player_name: playerData?.name || 'Unknown',
+          status: 'pending',
         });
+
+      if (requestError) {
+        console.error('Error creating join request:', requestError);
+        alert('Failed to send join request');
+        return;
+      }
 
       setJoinModal(false);
       setSelectedGroup(null);
-      console.log('✅ Successfully joined group:', group.name);
-      setActiveGroupId(group.id);
-      await refetchUserGroups();
+      alert('Join request sent! The group admin will review your request.');
       await fetchPublicGroups();
       router.back();
     } catch (error: any) {
@@ -440,7 +452,7 @@ export default function GroupBrowserScreen() {
                 </View>
                 
                 <Text style={styles.confirmText}>
-                  Are you sure you want to join this group?
+                  Send a join request to this group? The admin will review your request.
                 </Text>
                 
                 <View style={styles.modalActions}>
@@ -456,7 +468,7 @@ export default function GroupBrowserScreen() {
                     disabled={isJoining}
                   >
                     <Text style={styles.confirmButtonText}>
-                      {isJoining ? 'Joining...' : 'Join Group'}
+                      {isJoining ? 'Sending...' : 'Send Request'}
                     </Text>
                   </TouchableOpacity>
                 </View>

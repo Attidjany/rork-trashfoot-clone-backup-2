@@ -24,7 +24,10 @@ import {
   Clock,
   CheckCircle,
   User,
-  Calendar
+  Calendar,
+  UserPlus,
+  X as XIcon,
+  Check
 } from 'lucide-react-native';
 
 let DateTimePicker: any = null;
@@ -44,7 +47,7 @@ export default function GroupDetailsScreen() {
   const { user } = useSession();
   const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   
-  const [activeTab, setActiveTab] = useState<'overview' | 'matches' | 'members'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'matches' | 'members' | 'requests'>('overview');
   const [createCompModal, setCreateCompModal] = useState(false);
   const [compName, setCompName] = useState('');
   const [compType, setCompType] = useState<'league' | 'tournament' | 'friendly'>('league');
@@ -52,6 +55,7 @@ export default function GroupDetailsScreen() {
   const [group, setGroup] = useState<Group | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   
   // League options
   const [leagueFormat, setLeagueFormat] = useState<'single' | 'double'>('single');
@@ -95,6 +99,16 @@ export default function GroupDetailsScreen() {
         const foundGroup = groups.find(g => g.id === groupId);
         if (foundGroup) {
           setGroup(foundGroup);
+          
+          if (player && (foundGroup.adminId === player.id || foundGroup.adminIds?.includes(player.id))) {
+            const { data: requests } = await supabase
+              .from('pending_group_members')
+              .select('*')
+              .eq('group_id', groupId)
+              .eq('status', 'pending');
+            
+            setPendingRequests(requests || []);
+          }
         }
         setIsLoading(false);
       } catch (error) {
@@ -104,6 +118,26 @@ export default function GroupDetailsScreen() {
     };
 
     fetchGroupDetails();
+    
+    const channel = supabase
+      .channel(`pending-requests-${groupId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pending_group_members',
+          filter: `group_id=eq.${groupId}`,
+        },
+        () => {
+          fetchGroupDetails();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [groupId, user, groups]);
 
   const isAdmin = group && playerId && (group.adminId === playerId || group.adminIds?.includes(playerId));
@@ -574,6 +608,133 @@ export default function GroupDetailsScreen() {
     </ScrollView>
   );
 
+  const handleApproveRequest = async (requestId: string) => {
+    if (!playerId) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('approve_join_request', {
+        p_pending_id: requestId,
+        p_admin_player_id: playerId,
+      });
+      
+      if (error) {
+        console.error('Error approving request:', error);
+        Alert.alert('Error', 'Failed to approve request');
+      } else if (data?.success) {
+        Alert.alert('Success', 'Request approved');
+      } else {
+        Alert.alert('Error', data?.message || 'Failed to approve request');
+      }
+    } catch (error: any) {
+      console.error('Error approving request:', error);
+      Alert.alert('Error', error?.message || 'Failed to approve request');
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    if (!playerId) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('reject_join_request', {
+        p_pending_id: requestId,
+        p_admin_player_id: playerId,
+      });
+      
+      if (error) {
+        console.error('Error rejecting request:', error);
+        Alert.alert('Error', 'Failed to reject request');
+      } else if (data?.success) {
+        Alert.alert('Success', 'Request rejected');
+      } else {
+        Alert.alert('Error', data?.message || 'Failed to reject request');
+      }
+    } catch (error: any) {
+      console.error('Error rejecting request:', error);
+      Alert.alert('Error', error?.message || 'Failed to reject request');
+    }
+  };
+
+  const renderRequests = () => (
+    <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Join Requests ({pendingRequests.length})</Text>
+        {pendingRequests.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <UserPlus size={48} color="#64748B" />
+            <Text style={styles.emptyText}>No pending requests</Text>
+          </View>
+        ) : (
+          pendingRequests.map(request => (
+            <View key={request.id} style={styles.requestCard}>
+              <View style={styles.requestInfo}>
+                <View style={styles.requestAvatar}>
+                  <User size={24} color="#fff" />
+                </View>
+                <View style={styles.requestDetails}>
+                  <Text style={styles.requestName}>{request.player_name}</Text>
+                  <Text style={styles.requestDate}>
+                    Requested {new Date(request.requested_at).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.requestActions}>
+                <TouchableOpacity
+                  style={[styles.requestButton, styles.approveButton]}
+                  onPress={() => {
+                    if (Platform.OS === 'web') {
+                      if (window.confirm('Approve this join request?')) {
+                        handleApproveRequest(request.id);
+                      }
+                    } else {
+                      Alert.alert(
+                        'Approve Request',
+                        'Approve this join request?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Approve',
+                            onPress: () => handleApproveRequest(request.id),
+                          },
+                        ]
+                      );
+                    }
+                  }}
+                >
+                  <Check size={16} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.requestButton, styles.rejectButton]}
+                  onPress={() => {
+                    if (Platform.OS === 'web') {
+                      if (window.confirm('Reject this join request?')) {
+                        handleRejectRequest(request.id);
+                      }
+                    } else {
+                      Alert.alert(
+                        'Reject Request',
+                        'Reject this join request?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Reject',
+                            style: 'destructive',
+                            onPress: () => handleRejectRequest(request.id),
+                          },
+                        ]
+                      );
+                    }
+                  }}
+                >
+                  <XIcon size={16} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+    </ScrollView>
+  );
+
   const renderMembers = () => (
     <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
@@ -621,6 +782,7 @@ export default function GroupDetailsScreen() {
       case 'overview': return renderOverview();
       case 'matches': return renderMatches();
       case 'members': return renderMembers();
+      case 'requests': return renderRequests();
       default: return renderOverview();
     }
   };
@@ -646,6 +808,7 @@ export default function GroupDetailsScreen() {
           { id: 'overview' as const, label: 'Overview', icon: Target },
           { id: 'matches' as const, label: 'Matches', icon: Trophy },
           { id: 'members' as const, label: 'Members', icon: Users },
+          ...(isAdmin ? [{ id: 'requests' as const, label: `Requests${pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ''}`, icon: UserPlus }] : []),
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1469,6 +1632,59 @@ const styles = StyleSheet.create({
   scoreSeparator: {
     fontSize: 20,
     color: '#64748B',
+  },
+  requestCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E293B',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  requestInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  requestAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#0EA5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  requestDetails: {
+    flex: 1,
+  },
+  requestName: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#fff',
+    marginBottom: 4,
+  },
+  requestDate: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  requestButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  approveButton: {
+    backgroundColor: '#10B981',
+  },
+  rejectButton: {
+    backgroundColor: '#EF4444',
   },
   dateButton: {
     flexDirection: 'row',
