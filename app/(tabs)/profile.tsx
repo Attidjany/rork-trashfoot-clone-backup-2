@@ -400,7 +400,7 @@ export default function ProfileScreen() {
                           <Text style={styles.activeBadgeText}>Active</Text>
                         </View>
                       )}
-                      {group.adminId === currentPlayer?.id && group.pendingRequestCount && group.pendingRequestCount > 0 && (
+                      {group.adminId === currentPlayer?.id && (group.pendingRequestCount ?? 0) > 0 && (
                         <View style={styles.pendingBadge}>
                           <Text style={styles.pendingBadgeText}>{group.pendingRequestCount} pending</Text>
                         </View>
