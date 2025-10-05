@@ -9,6 +9,7 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -187,39 +188,58 @@ export default function MatchesScreen() {
       return;
     }
 
-    Alert.alert(
-      'Delete Match',
-      'Are you sure you want to delete this match?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('🗑️ Deleting match via Supabase:', matchId);
-              const { error } = await supabase
-                .from('matches')
-                .delete()
-                .eq('id', matchId);
-              
-              if (error) {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to delete this match?')) {
+        try {
+          console.log('🗑️ Deleting match via Supabase:', matchId);
+          const { error } = await supabase
+            .from('matches')
+            .delete()
+            .eq('id', matchId);
+          
+          if (error) {
+            console.error('❌ Error deleting match:', error);
+            Alert.alert('Error', 'Failed to delete match');
+          } else {
+            console.log('✅ Match deleted successfully, realtime will update UI');
+          }
+        } catch (error: any) {
+          console.error('❌ Error deleting match:', error);
+          Alert.alert('Error', error?.message || 'Failed to delete match');
+        }
+      }
+    } else {
+      Alert.alert(
+        'Delete Match',
+        'Are you sure you want to delete this match?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                console.log('🗑️ Deleting match via Supabase:', matchId);
+                const { error } = await supabase
+                  .from('matches')
+                  .delete()
+                  .eq('id', matchId);
+                
+                if (error) {
+                  console.error('❌ Error deleting match:', error);
+                  Alert.alert('Error', 'Failed to delete match');
+                } else {
+                  console.log('✅ Match deleted successfully, realtime will update UI');
+                }
+              } catch (error: any) {
                 console.error('❌ Error deleting match:', error);
-                throw new Error(error.message);
+                Alert.alert('Error', error?.message || 'Failed to delete match');
               }
-              
-              console.log('✅ Match deleted successfully, realtime will update UI');
-            } catch (error: any) {
-              console.error('❌ Error deleting match:', error);
-              Alert.alert('Error', error?.message || 'Failed to delete match');
-            }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleShareYoutube = () => {
