@@ -489,8 +489,6 @@ export default function StatsScreen() {
                 <Text style={[styles.tableHeaderText, styles.statColumn]}>W</Text>
                 <Text style={[styles.tableHeaderText, styles.statColumn]}>D</Text>
                 <Text style={[styles.tableHeaderText, styles.statColumn]}>L</Text>
-                <Text style={[styles.tableHeaderText, styles.statColumn]}>GF</Text>
-                <Text style={[styles.tableHeaderText, styles.statColumn]}>GA</Text>
                 <Text style={[styles.tableHeaderText, styles.statColumn]}>GD</Text>
                 <Text style={[styles.tableHeaderText, styles.statColumn]}>PTS</Text>
               </View>
@@ -525,8 +523,6 @@ export default function StatsScreen() {
                     <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.wins}</Text>
                     <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.draws}</Text>
                     <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.losses}</Text>
-                    <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.goalsFor}</Text>
-                    <Text style={[styles.tableCell, styles.statColumn]}>{player.stats.goalsAgainst}</Text>
                     <Text style={[styles.tableCell, styles.statColumn, goalDiff > 0 && styles.positiveGD]}>
                       {goalDiff > 0 ? '+' : ''}{goalDiff}
                     </Text>
@@ -562,8 +558,6 @@ export default function StatsScreen() {
                       <Text style={[styles.tableHeaderText, styles.statColumn]}>W</Text>
                       <Text style={[styles.tableHeaderText, styles.statColumn]}>D</Text>
                       <Text style={[styles.tableHeaderText, styles.statColumn]}>L</Text>
-                      <Text style={[styles.tableHeaderText, styles.statColumn]}>GF</Text>
-                      <Text style={[styles.tableHeaderText, styles.statColumn]}>GA</Text>
                       <Text style={[styles.tableHeaderText, styles.statColumn]}>GD</Text>
                       <Text style={[styles.tableHeaderText, styles.statColumn]}>PTS</Text>
                     </View>
@@ -598,8 +592,6 @@ export default function StatsScreen() {
                           <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.wins}</Text>
                           <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.draws}</Text>
                           <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.losses}</Text>
-                          <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.goalsFor}</Text>
-                          <Text style={[styles.tableCell, styles.statColumn]}>{player.monthlyStats.goalsAgainst}</Text>
                           <Text style={[styles.tableCell, styles.statColumn, goalDiff > 0 && styles.positiveGD]}>
                             {goalDiff > 0 ? '+' : ''}{goalDiff}
                           </Text>
