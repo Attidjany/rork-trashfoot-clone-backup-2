@@ -20,7 +20,7 @@ export default function MatchDetailsScreen() {
   const insets = useSafeAreaInsets();
   const { activeGroupId } = useGameStore();
   const { user } = useSession();
-  const { groups, isLoading } = useRealtimeGroups(user?.id);
+  const { groups, isLoading } = useRealtimeGroups();
 
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
 

@@ -19,6 +19,7 @@ import { Match, Competition } from '@/types/game';
 import { useSession } from '@/hooks/use-session';
 import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 import { supabase } from '@/lib/supabase';
+import { trpc } from '@/lib/trpc';
 import { getMatchCountdown } from '@/lib/countdown-utils';
 
 export default function MatchesScreen() {
@@ -174,6 +175,8 @@ export default function MatchesScreen() {
     }
   };
 
+  const deleteMatchMutation = trpc.matches.delete.useMutation();
+
   const handleDeleteMatch = async (matchId: string) => {
     if (!currentPlayerId) {
       Alert.alert('Error', 'Player not found');
@@ -199,18 +202,8 @@ export default function MatchesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('🗑️ Deleting match from database:', matchId);
-              const { error } = await supabase
-                .from('matches')
-                .delete()
-                .eq('id', matchId);
-              
-              if (error) {
-                console.error('❌ Error deleting match:', error);
-                Alert.alert('Error', 'Failed to delete match');
-                return;
-              }
-              
+              console.log('🗑️ Deleting match via tRPC:', matchId);
+              await deleteMatchMutation.mutateAsync({ matchId });
               console.log('✅ Match deleted successfully, realtime will update UI');
             } catch (error: any) {
               console.error('❌ Error deleting match:', error);

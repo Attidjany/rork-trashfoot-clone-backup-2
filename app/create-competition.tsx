@@ -28,7 +28,7 @@ export default function CreateCompetitionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useSession();
-  const { groups, refetch } = useRealtimeGroups(user?.id);
+  const { groups, refetch } = useRealtimeGroups();
   const { activeGroupId } = useGameStore();
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0];
   const [isCreating, setIsCreating] = useState(false);

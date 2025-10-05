@@ -18,8 +18,8 @@ import { useRealtimeGroups } from '@/hooks/use-realtime-groups';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
-  const { user, loading: sessionLoading } = useSession();
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { loading: sessionLoading } = useSession();
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   const { activeGroupId, messages, sendMessage, currentUser } = useGameStore();
   
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;

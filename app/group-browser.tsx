@@ -29,7 +29,7 @@ export default function GroupBrowserScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useSession();
   const { setActiveGroupId } = useGameStore();
-  const { refetch: refetchUserGroups } = useRealtimeGroups(user?.id);
+  const { refetch: refetchUserGroups } = useRealtimeGroups();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [joinModal, setJoinModal] = useState(false);

@@ -50,9 +50,8 @@ export default function SettingsScreen() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   
   const { user } = useSession();
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
+  const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups();
   const checkHandleMutation = trpc.auth.checkGamerHandle.useMutation();
-  const updateProfileMutation = trpc.auth.updateProfile.useMutation();
   
   const firstGroup = groups.length > 0 ? groups[0] : null;
   const currentPlayer = firstGroup?.members.find(m => m.email === user?.email) ?? null;
@@ -107,15 +106,43 @@ export default function SettingsScreen() {
       return;
     }
 
+    if (!user?.id) {
+      Alert.alert('Error', 'User not authenticated');
+      return;
+    }
+
     setIsUpdatingProfile(true);
     try {
-      console.log('🔄 Updating profile...');
-      await updateProfileMutation.mutateAsync({
-        name: editName.trim(),
-        gamerHandle: editGamerHandle.trim(),
-      });
+      console.log('🔄 Updating profile directly via Supabase...');
+      
+      const { data: player } = await supabase
+        .from('players')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
 
-      console.log('✅ Profile updated successfully');
+      if (!player) {
+        Alert.alert('Error', 'Player not found');
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({
+          name: editName.trim(),
+          gamer_handle: editGamerHandle.trim(),
+        })
+        .eq('id', player.id);
+
+      if (updateError) {
+        console.error('❌ Profile update error:', updateError);
+        Alert.alert('Error', updateError.message || 'Failed to update profile');
+        return;
+      }
+
+      console.log('✅ Profile updated successfully, refetching groups...');
+      await refetchGroups();
+      
       Alert.alert('Success', 'Profile updated successfully!');
       setEditProfileModal(false);
       setEditName('');

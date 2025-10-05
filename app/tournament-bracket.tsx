@@ -32,7 +32,7 @@ export default function TournamentBracketScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
   const { user } = useSession();
-  const { groups, isLoading: groupsLoading } = useRealtimeGroups(user?.id);
+  const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   const { activeGroupId } = useGameStore();
   
   const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
