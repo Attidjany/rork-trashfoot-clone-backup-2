@@ -123,10 +123,25 @@ export interface ChatMessage {
   senderName: string;
   message: string;
   timestamp: string;
-  type: 'text' | 'match_result' | 'youtube_link';
+  type: 'text' | 'match_result' | 'youtube_link' | 'match_live' | 'match_score' | 'competition_created' | 'competition_deadline' | 'competition_finished';
   metadata?: {
     matchId?: string;
     youtubeLink?: string;
+    competitionId?: string;
+    competitionName?: string;
+    competitionType?: string;
+    matchCount?: number;
+    deadlineDays?: number;
+    winnerId?: string;
+    winnerName?: string;
+    matchesPlayed?: number;
+    matchesDropped?: number;
+    homePlayerId?: string;
+    awayPlayerId?: string;
+    homePlayerName?: string;
+    awayPlayerName?: string;
+    homeScore?: number;
+    awayScore?: number;
   };
 }
 

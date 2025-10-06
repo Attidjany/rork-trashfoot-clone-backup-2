@@ -122,7 +122,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
           senderName: msg.sender_name,
           message: msg.message,
           timestamp: msg.timestamp,
-          type: msg.type as 'text' | 'match_result' | 'youtube_link',
+          type: msg.type as ChatMessage['type'],
           metadata: msg.metadata || undefined,
         }));
         console.log('📥 Loaded', chatMessages.length, 'messages');
@@ -152,7 +152,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
             senderName: newMsg.sender_name,
             message: newMsg.message,
             timestamp: newMsg.timestamp,
-            type: newMsg.type as 'text' | 'match_result' | 'youtube_link',
+            type: newMsg.type as ChatMessage['type'],
             metadata: newMsg.metadata || undefined,
           };
           setMessages(prev => {
