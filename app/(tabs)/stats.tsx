@@ -116,7 +116,16 @@ export default function StatsScreen() {
 
   const sortedPlayers = useMemo(() => {
     if (!activeGroup) return [];
-    return [...activeGroup.members].sort((a, b) => b.stats.points - a.stats.points);
+    return [...activeGroup.members]
+      .filter(player => player.stats.played > 0)
+      .sort((a, b) => {
+        if (b.stats.points !== a.stats.points) {
+          return b.stats.points - a.stats.points;
+        }
+        const aGD = a.stats.goalsFor - a.stats.goalsAgainst;
+        const bGD = b.stats.goalsFor - b.stats.goalsAgainst;
+        return bGD - aGD;
+      });
   }, [activeGroup, completedMatchesCount]);
 
   const monthlyStats = useMemo(() => {
@@ -276,7 +285,24 @@ export default function StatsScreen() {
     );
   }
 
-  const renderPlayerCard = (player: Player, rank: number) => {
+  const calculateRank = (players: Player[], currentIndex: number): number => {
+    if (currentIndex === 0) return 1;
+    
+    const currentPlayer = players[currentIndex];
+    const previousPlayer = players[currentIndex - 1];
+    
+    const currentGD = currentPlayer.stats.goalsFor - currentPlayer.stats.goalsAgainst;
+    const previousGD = previousPlayer.stats.goalsFor - previousPlayer.stats.goalsAgainst;
+    
+    if (currentPlayer.stats.points === previousPlayer.stats.points && currentGD === previousGD) {
+      return calculateRank(players, currentIndex - 1);
+    }
+    
+    return currentIndex + 1;
+  };
+
+  const renderPlayerCard = (player: Player, index: number, allPlayers: Player[]) => {
+    const rank = calculateRank(allPlayers, index);
     const goalDiff = player.stats.goalsFor - player.stats.goalsAgainst;
     const isSelected = selectedPlayers.includes(player.id);
 
@@ -468,7 +494,7 @@ export default function StatsScreen() {
             <View style={styles.leaderboard}>
               {sortedPlayers.map((player, index) => {
                 if (!player?.gamerHandle?.trim()) return null;
-                return renderPlayerCard(player, index + 1);
+                return renderPlayerCard(player, index, sortedPlayers);
               })}
             </View>
           </>
@@ -495,20 +521,21 @@ export default function StatsScreen() {
               
               {sortedPlayers.map((player, index) => {
                 if (!player?.gamerHandle?.trim()) return null;
+                const rank = calculateRank(sortedPlayers, index);
                 const goalDiff = player.stats.goalsFor - player.stats.goalsAgainst;
                 
                 return (
                   <View key={player.id} style={[
                     styles.tableRow,
-                    index === 0 && styles.firstPlace,
-                    index === 1 && styles.secondPlace,
-                    index === 2 && styles.thirdPlace,
+                    rank === 1 && styles.firstPlace,
+                    rank === 2 && styles.secondPlace,
+                    rank === 3 && styles.thirdPlace,
                   ]}>
                     <Text style={[styles.tableCell, styles.positionColumn, 
-                      index === 0 && styles.goldText,
-                      index === 1 && styles.silverText,
-                      index === 2 && styles.bronzeText,
-                    ]}>{index + 1}</Text>
+                      rank === 1 && styles.goldText,
+                      rank === 2 && styles.silverText,
+                      rank === 3 && styles.bronzeText,
+                    ]}>{rank}</Text>
                     <View style={[styles.tableCell, styles.playerColumn]}>
                       <Text style={styles.playerTableName} numberOfLines={1}>
                         @{player.gamerHandle}
@@ -564,20 +591,34 @@ export default function StatsScreen() {
                     
                     {players.map((player, index) => {
                       if (!player?.gamerHandle?.trim()) return null;
+                      
+                      const calculateMonthlyRank = (idx: number): number => {
+                        if (idx === 0) return 1;
+                        const current = players[idx];
+                        const previous = players[idx - 1];
+                        const currentGD = current.monthlyStats.goalsFor - current.monthlyStats.goalsAgainst;
+                        const previousGD = previous.monthlyStats.goalsFor - previous.monthlyStats.goalsAgainst;
+                        if (current.monthlyStats.points === previous.monthlyStats.points && currentGD === previousGD) {
+                          return calculateMonthlyRank(idx - 1);
+                        }
+                        return idx + 1;
+                      };
+                      
+                      const rank = calculateMonthlyRank(index);
                       const goalDiff = player.monthlyStats.goalsFor - player.monthlyStats.goalsAgainst;
                       
                       return (
                         <View key={player.id} style={[
                           styles.tableRow,
-                          index === 0 && styles.firstPlace,
-                          index === 1 && styles.secondPlace,
-                          index === 2 && styles.thirdPlace,
+                          rank === 1 && styles.firstPlace,
+                          rank === 2 && styles.secondPlace,
+                          rank === 3 && styles.thirdPlace,
                         ]}>
                           <Text style={[styles.tableCell, styles.positionColumn, 
-                            index === 0 && styles.goldText,
-                            index === 1 && styles.silverText,
-                            index === 2 && styles.bronzeText,
-                          ]}>{index + 1}</Text>
+                            rank === 1 && styles.goldText,
+                            rank === 2 && styles.silverText,
+                            rank === 3 && styles.bronzeText,
+                          ]}>{rank}</Text>
                           <View style={[styles.tableCell, styles.playerColumn]}>
                             <Text style={styles.playerTableName} numberOfLines={1}>
                               @{player.gamerHandle}
@@ -619,9 +660,10 @@ export default function StatsScreen() {
             ) : (
               leagueStats.map(({ league, players, totalParticipants, hasCompletedMatches }) => {
                 const isExpanded = showFullTable[league.id] || false;
-                const displayPlayers = isExpanded ? players : players.slice(0, 3);
+                const filteredPlayers = hasCompletedMatches ? players.filter(p => p.leagueStats.played > 0) : players;
+                const displayPlayers = isExpanded ? filteredPlayers : filteredPlayers.slice(0, 3);
                 const isOngoing = league.status === 'active';
-                const hasMatches = players.length > 0;
+                const hasMatches = filteredPlayers.length > 0;
                 
                 return (
                   <View key={league.id} style={styles.leagueCard}>
@@ -729,20 +771,34 @@ export default function StatsScreen() {
                       </View>
                       
                       {displayPlayers.map((player, index) => {
+                        const calculateLeagueRank = (idx: number): number => {
+                          if (idx === 0) return 1;
+                          const current = filteredPlayers[idx];
+                          const previous = filteredPlayers[idx - 1];
+                          const currentGD = current.leagueStats.goalsFor - current.leagueStats.goalsAgainst;
+                          const previousGD = previous.leagueStats.goalsFor - previous.leagueStats.goalsAgainst;
+                          if (current.leagueStats.points === previous.leagueStats.points && currentGD === previousGD) {
+                            return calculateLeagueRank(idx - 1);
+                          }
+                          return idx + 1;
+                        };
+                        
+                        const actualIndex = filteredPlayers.findIndex(p => p.id === player.id);
+                        const rank = calculateLeagueRank(actualIndex);
                         const goalDiff = player.leagueStats.goalsFor - player.leagueStats.goalsAgainst;
                         
                         return (
                           <View key={player.id} style={[
                             styles.tableRow,
-                            index === 0 && styles.firstPlace,
-                            index === 1 && styles.secondPlace,
-                            index === 2 && styles.thirdPlace,
+                            rank === 1 && styles.firstPlace,
+                            rank === 2 && styles.secondPlace,
+                            rank === 3 && styles.thirdPlace,
                           ]}>
                             <Text style={[styles.tableCell, styles.positionColumn, 
-                              index === 0 && styles.goldText,
-                              index === 1 && styles.silverText,
-                              index === 2 && styles.bronzeText,
-                            ]}>{index + 1}</Text>
+                              rank === 1 && styles.goldText,
+                              rank === 2 && styles.silverText,
+                              rank === 3 && styles.bronzeText,
+                            ]}>{rank}</Text>
                             <View style={[styles.tableCell, styles.playerColumn]}>
                               <Text style={styles.playerTableName} numberOfLines={1}>
                                 @{player.gamerHandle}
@@ -779,7 +835,7 @@ export default function StatsScreen() {
                     )}
                     
                     {/* Expand/Collapse Button */}
-                    {hasMatches && players.length > 3 && (
+                    {hasMatches && filteredPlayers.length > 3 && (
                       <TouchableOpacity
                         style={styles.expandButton}
                         onPress={() => setShowFullTable(prev => ({
@@ -793,7 +849,7 @@ export default function StatsScreen() {
                           <ChevronDown size={16} color="#0EA5E9" />
                         )}
                         <Text style={styles.expandButtonText}>
-                          {isExpanded ? 'Show Less' : `Show All ${players.length} Players`}
+                          {isExpanded ? 'Show Less' : `Show All ${filteredPlayers.length} Players`}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -812,9 +868,9 @@ export default function StatsScreen() {
             
             {/* Player Selection */}
             <View style={styles.playerList}>
-              {sortedPlayers.map((player, index) => {
+              {activeGroup?.members.map((player, index) => {
                 if (!player?.gamerHandle?.trim()) return null;
-                return renderPlayerCard(player, index + 1);
+                return renderPlayerCard(player, index, activeGroup.members);
               })}
             </View>
 

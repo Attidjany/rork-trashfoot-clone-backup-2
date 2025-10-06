@@ -693,14 +693,14 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
     return true;
   }, [currentUser, activeGroup]);
 
-  const setLoggedInUser = useCallback((user: Player, gameData?: { currentUser: Player; groups: Group[]; activeGroupId: string; messages: ChatMessage[] }) => {
+  const setLoggedInUser = useCallback(async (user: Player, gameData?: { currentUser: Player; groups: Group[]; activeGroupId: string; messages: ChatMessage[] }) => {
     console.log('=== SETTING LOGGED IN USER ===');
     console.log('User:', user.name, user.email, user.role);
     console.log('Game data provided:', !!gameData);
     
     if (gameData && gameData.groups && gameData.groups.length > 0) {
       console.log('Loading game data with groups:', gameData.groups.length);
-      console.log('Active group ID:', gameData.activeGroupId);
+      console.log('Active group ID from data:', gameData.activeGroupId);
       console.log('Messages count:', gameData.messages?.length || 0);
       
       const currentUserFromData = gameData.currentUser || user;
@@ -716,8 +716,14 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
       console.log('Setting groups:', updatedGroups.length);
       setGroups(updatedGroups);
       
-      console.log('Setting active group ID:', gameData.activeGroupId);
-      setActiveGroupId(gameData.activeGroupId || null);
+      const savedGroupId = await AsyncStorage.getItem(ACTIVE_GROUP_KEY);
+      console.log('Saved group ID from storage:', savedGroupId);
+      
+      const groupExists = updatedGroups.some(g => g.id === savedGroupId);
+      const finalActiveGroupId = (savedGroupId && groupExists) ? savedGroupId : (gameData.activeGroupId || null);
+      
+      console.log('Setting active group ID:', finalActiveGroupId);
+      setActiveGroupId(finalActiveGroupId);
       
       console.log('Setting messages:', gameData.messages?.length || 0);
       setMessages(gameData.messages || []);
@@ -729,7 +735,11 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
     } else {
       console.log('No game data provided or empty groups, clearing existing data');
       setGroups([]);
-      setActiveGroupId(null);
+      
+      const savedGroupId = await AsyncStorage.getItem(ACTIVE_GROUP_KEY);
+      console.log('Saved group ID from storage (no groups):', savedGroupId);
+      setActiveGroupId(savedGroupId);
+      
       setMessages([]);
       
       console.log('Setting current user:', user);
@@ -832,15 +842,12 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
       setActiveGroupId(null);
       setMessages([]);
       
-      console.log('🔄 Removing persisted active group...');
-      await persistActiveGroupId(null);
-      
-      console.log('✅ Logout successful - state cleared');
+      console.log('✅ Logout successful - active group ID preserved for next login');
     } catch (error) {
       console.error('❌ Error during logout:', error);
       throw error;
     }
-  }, [persistActiveGroupId]);
+  }, []);
 
   const getRoundName = (round: number, totalRounds: number): string => {
     if (round === totalRounds - 1) return 'Final';
