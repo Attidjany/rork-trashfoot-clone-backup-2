@@ -95,12 +95,12 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
   }, []);
 
   useEffect(() => {
-    if (!activeGroupId) {
+    if (!activeGroupId || !currentUser) {
       setMessages([]);
       return;
     }
 
-    console.log('💬 Setting up chat realtime subscription for group:', activeGroupId);
+    console.log('💬 Setting up chat realtime subscription for group:', activeGroupId, 'user:', currentUser.gamerHandle);
 
     const loadMessages = async () => {
       const { data, error } = await supabase
@@ -178,7 +178,7 @@ export const [GameProvider, useGameStore] = createContextHook(() => {
       console.log('💬 Cleaning up chat subscription');
       supabase.removeChannel(channel);
     };
-  }, [activeGroupId]);
+  }, [activeGroupId, currentUser]);
 
   const persistActiveGroupId = useCallback(async (groupId: string | null) => {
     try {
