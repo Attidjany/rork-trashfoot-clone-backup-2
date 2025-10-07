@@ -588,7 +588,7 @@ SELECT
 FROM chat_messages;
 
 -- Final notice
-DO $
+DO $$
 BEGIN
   RAISE NOTICE '✅ Setup complete!';
   RAISE NOTICE '📱 Test in your app:';
@@ -596,4 +596,4 @@ BEGIN
   RAISE NOTICE '   2. Create a competition - should see chat event';
   RAISE NOTICE '   3. Start a match - should see chat event';
   RAISE NOTICE '   4. Complete a match - should see chat event';
-END $;
+END $$;
