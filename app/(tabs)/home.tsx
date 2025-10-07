@@ -148,7 +148,7 @@ export default function HomeScreen() {
                 )}
               </View>
               <View style={styles.playerInfo}>
-                <Text style={styles.playerName}>{player.name}</Text>
+                <Text style={styles.playerName}>@{player.gamerHandle}</Text>
                 <View style={styles.playerStats}>
                   <Text style={styles.playerStatText}>
                     {player.stats.played} played • {player.stats.wins}W {player.stats.draws}D {player.stats.losses}L
@@ -182,13 +182,13 @@ export default function HomeScreen() {
                 onPress={() => router.push(`/match-details?id=${match.id}`)}
               >
                 <View style={styles.matchPlayers}>
-                  <Text style={styles.matchPlayer}>{homePlayer?.name}</Text>
+                  <Text style={styles.matchPlayer}>@{homePlayer?.gamerHandle}</Text>
                   <View style={styles.matchScore}>
                     <Text style={styles.scoreText}>{match.homeScore}</Text>
                     <Text style={styles.scoreSeparator}>-</Text>
                     <Text style={styles.scoreText}>{match.awayScore}</Text>
                   </View>
-                  <Text style={styles.matchPlayer}>{awayPlayer?.name}</Text>
+                  <Text style={styles.matchPlayer}>@{awayPlayer?.gamerHandle}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -214,7 +214,7 @@ export default function HomeScreen() {
                 onPress={() => router.push(`/match-details?id=${match.id}`)}
               >
                 <View style={styles.matchPlayers}>
-                  <Text style={styles.matchPlayer}>{homePlayer?.name}</Text>
+                  <Text style={styles.matchPlayer}>@{homePlayer?.gamerHandle}</Text>
                   <View style={styles.matchTime}>
                     <Calendar size={14} color="#64748B" />
                     <Text style={styles.timeText}>
@@ -227,7 +227,7 @@ export default function HomeScreen() {
                       }
                     </Text>
                   </View>
-                  <Text style={styles.matchPlayer}>{awayPlayer?.name}</Text>
+                  <Text style={styles.matchPlayer}>@{awayPlayer?.gamerHandle}</Text>
                 </View>
               </TouchableOpacity>
             );
