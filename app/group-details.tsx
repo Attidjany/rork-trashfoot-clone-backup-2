@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -27,8 +27,11 @@ import {
   Calendar,
   UserPlus,
   X as XIcon,
-  Check
+  Check,
+  Camera
 } from 'lucide-react-native';
+import { captureRef } from 'react-native-view-shot';
+import * as Clipboard from 'expo-clipboard';
 
 let DateTimePicker: any = null;
 if (Platform.OS !== 'web') {
@@ -77,6 +80,7 @@ export default function GroupDetailsScreen() {
     return date;
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const matchCardRefs = useRef<{ [key: string]: any }>({});
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
@@ -159,6 +163,35 @@ export default function GroupDetailsScreen() {
     } catch (error: any) {
       console.error('❌ Error deleting match:', error);
       Alert.alert('Error', error?.message || 'Failed to delete match');
+    }
+  };
+
+  const handleScreenshotMatch = async (matchId: string) => {
+    try {
+      const viewRef = matchCardRefs.current[matchId];
+      if (!viewRef) {
+        Alert.alert('Error', 'Unable to capture screenshot');
+        return;
+      }
+
+      const uri = await captureRef(viewRef, {
+        format: 'png',
+        quality: 1,
+      });
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const item = new ClipboardItem({ 'image/png': blob });
+        await navigator.clipboard.write([item]);
+        Alert.alert('Success', 'Match score copied to clipboard!');
+      } else {
+        await Clipboard.setImageAsync(uri);
+        Alert.alert('Success', 'Match score copied to clipboard!');
+      }
+    } catch (error: any) {
+      console.error('Error capturing screenshot:', error);
+      Alert.alert('Error', 'Failed to capture screenshot');
     }
   };
 
@@ -488,20 +521,39 @@ export default function GroupDetailsScreen() {
             (match.homePlayerId === playerId || match.awayPlayerId === playerId);
           
           return (
-            <View key={match.id} style={styles.matchCard}>
+            <View 
+              key={match.id} 
+              ref={(ref) => {
+                if (match.status === 'completed') {
+                  matchCardRefs.current[match.id] = ref;
+                }
+              }}
+              style={styles.matchCard}
+              collapsable={false}
+            >
               <View style={styles.matchHeader}>
                 <Text style={styles.matchTitle}>
                   {homePlayer?.name} vs {awayPlayer?.name}
                 </Text>
-                <View style={[
-                  styles.statusBadge,
-                  { backgroundColor: match.status === 'completed' ? '#10B981' : 
-                                   match.status === 'live' ? '#EF4444' : '#6B7280' }
-                ]}>
-                  {match.status === 'live' && <Play size={12} color="#fff" />}
-                  {match.status === 'completed' && <CheckCircle size={12} color="#fff" />}
-                  {match.status === 'scheduled' && <Clock size={12} color="#fff" />}
-                  <Text style={styles.statusText}>{match.status.toUpperCase()}</Text>
+                <View style={styles.matchHeaderRight}>
+                  <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: match.status === 'completed' ? '#10B981' : 
+                                     match.status === 'live' ? '#EF4444' : '#6B7280' }
+                  ]}>
+                    {match.status === 'live' && <Play size={12} color="#fff" />}
+                    {match.status === 'completed' && <CheckCircle size={12} color="#fff" />}
+                    {match.status === 'scheduled' && <Clock size={12} color="#fff" />}
+                    <Text style={styles.statusText}>{match.status.toUpperCase()}</Text>
+                  </View>
+                  {match.status === 'completed' && (
+                    <TouchableOpacity
+                      style={styles.screenshotButton}
+                      onPress={() => handleScreenshotMatch(match.id)}
+                    >
+                      <Camera size={16} color="#0EA5E9" />
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
               
@@ -1293,6 +1345,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  matchHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   matchTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
@@ -1306,6 +1363,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
+  },
+  screenshotButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(14, 165, 233, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statusText: {
     fontSize: 10,
