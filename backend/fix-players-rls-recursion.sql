@@ -10,6 +10,9 @@ DROP POLICY IF EXISTS "Users can insert own profile" ON players;
 DROP POLICY IF EXISTS "Public groups are viewable by everyone" ON groups;
 DROP POLICY IF EXISTS "Authenticated users can create groups" ON groups;
 DROP POLICY IF EXISTS "Group admins can update groups" ON groups;
+DROP POLICY IF EXISTS "Group admins can delete groups" ON groups;
+
+
 
 DROP POLICY IF EXISTS "Group members viewable by group members" ON group_members;
 DROP POLICY IF EXISTS "Group admins can add members" ON group_members;
@@ -18,10 +21,13 @@ DROP POLICY IF EXISTS "Group admins can remove members" ON group_members;
 DROP POLICY IF EXISTS "Pending members viewable by admins and requester" ON pending_group_members;
 DROP POLICY IF EXISTS "Authenticated users can request to join" ON pending_group_members;
 DROP POLICY IF EXISTS "Group admins can update pending members" ON pending_group_members;
+DROP POLICY IF EXISTS "Group admins can delete pending members" ON pending_group_members;
 
 DROP POLICY IF EXISTS "Competitions viewable by group members" ON competitions;
 DROP POLICY IF EXISTS "Group admins can create competitions" ON competitions;
 DROP POLICY IF EXISTS "Group admins can update competitions" ON competitions;
+DROP POLICY IF EXISTS "Group admins can delete pending members" ON competitions;
+DROP POLICY IF EXISTS "Group admins can delete competitions" ON competitions;
 
 DROP POLICY IF EXISTS "Competition participants viewable by group members" ON competition_participants;
 DROP POLICY IF EXISTS "Group admins can add participants" ON competition_participants;
@@ -29,6 +35,7 @@ DROP POLICY IF EXISTS "Group admins can add participants" ON competition_partici
 DROP POLICY IF EXISTS "Matches viewable by group members" ON matches;
 DROP POLICY IF EXISTS "Group admins can create matches" ON matches;
 DROP POLICY IF EXISTS "Group admins and players can update matches" ON matches;
+DROP POLICY IF EXISTS "Group admins can delete matches" ON matches;
 
 DROP POLICY IF EXISTS "Chat messages viewable by group members" ON chat_messages;
 DROP POLICY IF EXISTS "Group members can send messages" ON chat_messages;
