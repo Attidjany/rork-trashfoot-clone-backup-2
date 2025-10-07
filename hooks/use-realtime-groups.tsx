@@ -128,29 +128,20 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
 
       const groupIds = groupMembers.map((gm: any) => gm.groups.id);
 
-      const [allMembersData, allCompetitionsData] = await Promise.all([
+      const [allMembersData, allCompetitionsData, allPlayersData] = await Promise.all([
         supabase
           .from('group_members')
-          .select(`
-            group_id,
-            player_id,
-            is_admin,
-            players (
-              id,
-              name,
-              gamer_handle,
-              email,
-              role,
-              status,
-              joined_at
-            )
-          `)
+          .select('group_id, player_id, is_admin')
           .in('group_id', groupIds),
         
         supabase
           .from('competitions')
           .select('*')
           .in('group_id', groupIds),
+        
+        supabase
+          .from('players')
+          .select('id, name, gamer_handle, email, role, status, joined_at'),
       ]);
 
       const competitionIds = (allCompetitionsData.data || []).map((c: any) => c.id);
@@ -166,6 +157,11 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
           .select('competition_id, player_id')
           .in('competition_id', competitionIds),
       ]) : [{ data: [] }, { data: [] }];
+
+      const playersMap = new Map<string, any>();
+      (allPlayersData.data || []).forEach((p: any) => {
+        playersMap.set(p.id, p);
+      });
 
       const membersByGroup = new Map<string, any[]>();
       (allMembersData.data || []).forEach((m: any) => {
@@ -252,16 +248,25 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
 
         const allMatches = competitionsWithMatches.flatMap(c => c.matches);
         
-        const membersList: Player[] = members.map((m: any) => ({
-          id: m.players.id,
-          name: m.players.name,
-          gamerHandle: m.players.gamer_handle,
-          email: m.players.email,
-          role: m.players.role,
-          status: m.players.status,
-          joinedAt: m.players.joined_at,
-          stats: calculatePlayerStats(m.players.id, allMatches),
-        }));
+        const membersList: Player[] = members
+          .map((m: any) => {
+            const playerData = playersMap.get(m.player_id);
+            if (!playerData) {
+              console.warn('⚠️ Player data not found for player_id:', m.player_id);
+              return null;
+            }
+            return {
+              id: playerData.id,
+              name: playerData.name,
+              gamerHandle: playerData.gamer_handle,
+              email: playerData.email,
+              role: playerData.role,
+              status: playerData.status,
+              joinedAt: playerData.joined_at,
+              stats: calculatePlayerStats(playerData.id, allMatches),
+            };
+          })
+          .filter((m: any) => m !== null) as Player[];
 
         return {
           id: gm.groups.id,
