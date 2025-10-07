@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Plus, Calendar, Trophy, Youtube, CheckCircle, Target, Timer } from 'lucide-react-native';
+import { Plus, Calendar, Trophy, Youtube, CheckCircle, Target, Timer, Camera } from 'lucide-react-native';
+import { captureRef } from 'react-native-view-shot';
+import * as Clipboard from 'expo-clipboard';
 import { useGameStore } from '@/hooks/use-game-store';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Match, Competition } from '@/types/game';
@@ -58,6 +60,7 @@ export default function MatchesScreen() {
   const [awayScore, setAwayScore] = useState('');
   const [youtubeLink, setYoutubeLink] = useState('');
   const [goLiveWithoutLink, setGoLiveWithoutLink] = useState(false);
+  const matchCardRefs = useRef<{ [key: string]: any }>({});
 
   if (isLoading) {
     return (
@@ -243,6 +246,35 @@ export default function MatchesScreen() {
     }
   };
 
+  const handleScreenshotMatch = async (matchId: string) => {
+    try {
+      const viewRef = matchCardRefs.current[matchId];
+      if (!viewRef) {
+        Alert.alert('Error', 'Unable to capture screenshot');
+        return;
+      }
+
+      const uri = await captureRef(viewRef, {
+        format: 'png',
+        quality: 1,
+      });
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const item = new ClipboardItem({ 'image/png': blob });
+        await navigator.clipboard.write([item]);
+        Alert.alert('Success', 'Match score copied to clipboard!');
+      } else {
+        await Clipboard.setImageAsync(uri);
+        Alert.alert('Success', 'Match score copied to clipboard!');
+      }
+    } catch (error: any) {
+      console.error('Error capturing screenshot:', error);
+      Alert.alert('Error', 'Failed to capture screenshot');
+    }
+  };
+
   const handleShareYoutube = async () => {
     if (!selectedMatch) return;
     
@@ -359,15 +391,37 @@ export default function MatchesScreen() {
     const isDraw = isCompleted && match.homeScore === match.awayScore;
 
     return (
-      <TouchableOpacity
+      <View
         key={match.id}
-        style={styles.matchCard}
-        onPress={() => router.push(`/match-details?id=${match.id}`)}
+        ref={(ref) => {
+          if (match.status === 'completed') {
+            matchCardRefs.current[match.id] = ref;
+          }
+        }}
+        style={styles.matchCardWrapper}
+        collapsable={false}
       >
-        <View style={styles.competitionBadge}>
-          <Trophy size={12} color="#0EA5E9" />
-          <Text style={styles.competitionName}>{competition?.name}</Text>
-        </View>
+        <TouchableOpacity
+          style={styles.matchCard}
+          onPress={() => router.push(`/match-details?id=${match.id}`)}
+        >
+          <View style={styles.matchCardHeader}>
+            <View style={styles.competitionBadge}>
+              <Trophy size={12} color="#0EA5E9" />
+              <Text style={styles.competitionName}>{competition?.name}</Text>
+            </View>
+            {match.status === 'completed' && (
+              <TouchableOpacity
+                style={styles.screenshotButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleScreenshotMatch(match.id);
+                }}
+              >
+                <Camera size={16} color="#0EA5E9" />
+              </TouchableOpacity>
+            )}
+          </View>
         
         <View style={styles.matchContent}>
           <View style={[styles.playerSection, homeWon && styles.winnerSection]}>
@@ -502,7 +556,8 @@ export default function MatchesScreen() {
             </TouchableOpacity>
           </View>
         )}
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -769,17 +824,32 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  matchCardWrapper: {
+    marginBottom: 12,
+  },
   matchCard: {
     backgroundColor: '#1E293B',
     borderRadius: 12,
     padding: 16,
+  },
+  matchCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
+  },
+  screenshotButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(14, 165, 233, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   competitionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 12,
   },
   competitionName: {
     fontSize: 12,
