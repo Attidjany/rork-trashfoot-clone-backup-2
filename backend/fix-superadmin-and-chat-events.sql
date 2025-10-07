@@ -587,9 +587,13 @@ SELECT
   COUNT(*)::TEXT
 FROM chat_messages;
 
-RAISE NOTICE '✅ Setup complete!';
-RAISE NOTICE '📱 Test in your app:';
-RAISE NOTICE '   1. Superadmin should now see all competitions';
-RAISE NOTICE '   2. Create a competition - should see chat event';
-RAISE NOTICE '   3. Start a match - should see chat event';
-RAISE NOTICE '   4. Complete a match - should see chat event';
+-- Final notice
+DO $
+BEGIN
+  RAISE NOTICE '✅ Setup complete!';
+  RAISE NOTICE '📱 Test in your app:';
+  RAISE NOTICE '   1. Superadmin should now see all competitions';
+  RAISE NOTICE '   2. Create a competition - should see chat event';
+  RAISE NOTICE '   3. Start a match - should see chat event';
+  RAISE NOTICE '   4. Complete a match - should see chat event';
+END $;
