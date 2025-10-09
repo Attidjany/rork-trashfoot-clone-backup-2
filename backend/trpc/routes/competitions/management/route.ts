@@ -63,6 +63,8 @@ export const createCompetitionProcedure = protectedProcedure
       .select()
       .single();
 
+    console.log('Competition created:', competition?.id);
+
     if (compError || !competition) {
       console.error('Error creating competition:', compError);
       throw new Error('Failed to create competition');
@@ -101,12 +103,21 @@ export const createCompetitionProcedure = protectedProcedure
 
       if (matchesError) {
         console.error('Error creating matches:', matchesError);
+        throw new Error('Failed to create matches: ' + matchesError.message);
       }
 
-      await supabaseAdmin
+      console.log(`Created ${matches.length} matches for competition ${competition.id}`);
+
+      const { error: updateError } = await supabaseAdmin
         .from('competitions')
         .update({ status: 'active' })
         .eq('id', competition.id);
+
+      if (updateError) {
+        console.error('Error updating competition status:', updateError);
+      } else {
+        console.log('Competition status updated to active, trigger should fire now');
+      }
     }
 
     return {

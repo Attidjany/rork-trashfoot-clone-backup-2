@@ -132,6 +132,7 @@ export interface ChatMessage {
     competitionType?: string;
     matchCount?: number;
     deadlineDays?: number;
+    deadline?: string;
     winnerId?: string;
     winnerName?: string;
     matchesPlayed?: number;
@@ -142,6 +143,9 @@ export interface ChatMessage {
     awayPlayerName?: string;
     homeScore?: number;
     awayScore?: number;
+    participantCount?: number;
+    participantNames?: string;
+    creatorName?: string;
   };
 }
 

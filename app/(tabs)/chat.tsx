@@ -151,20 +151,37 @@ export default function ChatScreen() {
         case 'competition_created':
           return (
             <View style={styles.eventDetails}>
+              {message.metadata.creatorName && (
+                <View style={styles.eventInfoRow}>
+                  <Text style={styles.eventLabel}>Created by:</Text>
+                  <Text style={styles.eventValue}>{message.metadata.creatorName}</Text>
+                </View>
+              )}
               <View style={styles.eventInfoRow}>
                 <Text style={styles.eventLabel}>Type:</Text>
                 <Text style={styles.eventValue}>{message.metadata.competitionType}</Text>
               </View>
-              {message.metadata.matchCount !== undefined && message.metadata.matchCount > 0 && (
+              {message.metadata.participantCount !== undefined && (
+                <View style={styles.eventInfoRow}>
+                  <Text style={styles.eventLabel}>Participants:</Text>
+                  <Text style={styles.eventValue}>{message.metadata.participantCount}</Text>
+                </View>
+              )}
+              {message.metadata.participantNames && message.metadata.participantNames !== 'None' && (
+                <View style={styles.participantsList}>
+                  <Text style={styles.participantsText}>{message.metadata.participantNames}</Text>
+                </View>
+              )}
+              {message.metadata.matchCount !== undefined && (
                 <View style={styles.eventInfoRow}>
                   <Text style={styles.eventLabel}>Matches:</Text>
                   <Text style={styles.eventValue}>{message.metadata.matchCount}</Text>
                 </View>
               )}
-              {message.metadata.deadlineDays && (
+              {message.metadata.deadline && (
                 <View style={styles.eventInfoRow}>
                   <Text style={styles.eventLabel}>Deadline:</Text>
-                  <Text style={styles.eventValue}>{message.metadata.deadlineDays} days</Text>
+                  <Text style={styles.eventValue}>{new Date(message.metadata.deadline).toLocaleDateString()}</Text>
                 </View>
               )}
             </View>
@@ -618,5 +635,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FBBF24',
     marginTop: 2,
+  },
+  participantsList: {
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 4,
+  },
+  participantsText: {
+    fontSize: 11,
+    color: '#60A5FA',
+    lineHeight: 16,
   },
 });
