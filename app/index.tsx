@@ -3,7 +3,7 @@ import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSession } from '@/hooks/use-session';
 import { supabase } from '@/lib/supabase';
-import { trpc } from '@/lib/trpc';
+
 import { useGameStore } from '@/hooks/use-game-store';
 
 export default function Index() {
@@ -12,21 +12,7 @@ export default function Index() {
   const { setLoggedInUser } = useGameStore();
   const hasRedirected = useRef(false);
   
-  const backendTest = trpc.example.hi.useQuery(
-    { name: 'Test' },
-    { 
-      retry: 1,
-      refetchOnWindowFocus: false,
-    }
-  );
-  
-  useEffect(() => {
-    if (backendTest.data) {
-      console.log('✅ Backend connection successful:', backendTest.data);
-    } else if (backendTest.error) {
-      console.log('❌ Backend connection failed:', backendTest.error.message);
-    }
-  }, [backendTest.data, backendTest.error]);
+
 
   useEffect(() => {
     if (loading) {
