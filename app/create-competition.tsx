@@ -262,6 +262,20 @@ export default function CreateCompetitionScreen() {
         });
       }
     } else if (type === 'tournament' && tournamentType === 'knockout') {
+      const numPlayers = participantIds.length;
+      let initialStage = 'quarter_final';
+      
+      if (numPlayers === 4) {
+        initialStage = 'semi_final';
+      } else if (numPlayers === 8) {
+        initialStage = 'quarter_final';
+      } else if (numPlayers === 16) {
+        initialStage = 'round_of_16';
+      } else if (numPlayers === 32) {
+        initialStage = 'round_of_32';
+      }
+      
+      let matchOrder = 1;
       for (let i = 0; i < participantIds.length; i += 2) {
         if (i + 1 < participantIds.length) {
           matches.push({
@@ -270,7 +284,10 @@ export default function CreateCompetitionScreen() {
             away_player_id: participantIds[i + 1],
             status: 'scheduled',
             scheduled_time: scheduledTime,
+            stage: initialStage,
+            match_order: matchOrder,
           });
+          matchOrder++;
         }
       }
     }
