@@ -199,10 +199,11 @@ function generateMatches(
     // Randomize participant order for knockout tournaments
     const shuffledParticipants = shuffleArray(participantIds);
     console.log('🎲 Shuffled participants for knockout:', shuffledParticipants);
+    console.log('🏆 Creating knockout tournament with stage:', stage);
     
     for (let i = 0; i < shuffledParticipants.length; i += 2) {
       if (i + 1 < shuffledParticipants.length) {
-        matches.push({
+        const match = {
           competition_id: competitionId,
           home_player_id: shuffledParticipants[i],
           away_player_id: shuffledParticipants[i + 1],
@@ -210,10 +211,13 @@ function generateMatches(
           scheduled_time: scheduledTime,
           stage: stage,
           match_order: matchOrder,
-        });
+        };
+        console.log(`📋 Match ${matchOrder} (${stage}):`, match);
+        matches.push(match);
         matchOrder++;
       }
     }
+    console.log(`✅ Created ${matches.length} matches for stage ${stage}`);
   }
 
   return matches;
