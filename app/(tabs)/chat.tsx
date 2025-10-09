@@ -22,14 +22,18 @@ export default function ChatScreen() {
   const { groups, isLoading: groupsLoading } = useRealtimeGroups();
   const { activeGroupId, messages, sendMessage, currentUser } = useGameStore();
   
-  const activeGroup = groups.find(g => g.id === activeGroupId) || groups[0] || null;
+  const activeGroup = groups.find(g => g.id === activeGroupId) || null;
   const isLoading = sessionLoading || groupsLoading;
   const [inputText, setInputText] = useState('');
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    scrollViewRef.current?.scrollToEnd({ animated: true });
-  }, [messages]);
+    if (messages.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages, activeGroupId]);
 
   if (isLoading) {
     return (

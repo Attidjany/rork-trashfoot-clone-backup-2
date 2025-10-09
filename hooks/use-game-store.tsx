@@ -839,7 +839,6 @@ if (gmErr && String((gmErr as any).code) !== '23505') {
       console.log('🔄 Clearing local state...');
       setCurrentUser(null);
       setGroups([]);
-      setActiveGroupId(null);
       setMessages([]);
       
       console.log('✅ Logout successful - active group ID preserved for next login');
