@@ -203,8 +203,8 @@ function generateMatches(
     away_player_id: string;
     status: string;
     scheduled_time: string;
-    stage?: string;
-    match_order?: number;
+    stage: string | null;
+    match_order: number | null;
   }[] = [];
   const scheduledTime = deadline ? deadline.toISOString() : new Date(Date.now() + 7 * 86400000).toISOString();
 
@@ -217,6 +217,8 @@ function generateMatches(
           away_player_id: participantIds[j],
           status: 'scheduled' as const,
           scheduled_time: scheduledTime,
+          stage: null,
+          match_order: null,
         });
 
         if (leagueFormat === 'double') {
@@ -226,6 +228,8 @@ function generateMatches(
             away_player_id: participantIds[i],
             status: 'scheduled' as const,
             scheduled_time: scheduledTime,
+            stage: null,
+            match_order: null,
           });
         }
       }
@@ -239,6 +243,8 @@ function generateMatches(
         away_player_id: participantIds[1],
         status: 'scheduled' as const,
         scheduled_time: scheduledTime,
+        stage: null,
+        match_order: null,
       });
     }
   } else if (type === 'tournament' && tournamentType === 'knockout') {
