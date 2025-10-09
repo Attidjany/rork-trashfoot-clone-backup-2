@@ -113,10 +113,15 @@ export const createCompetitionProcedure = protectedProcedure
       
       console.log('🔍 FULL MATCH OBJECTS TO INSERT:', JSON.stringify(matches, null, 2));
       
+      console.log('🚀 ABOUT TO CALL SUPABASE INSERT');
+      console.log('🚀 FIRST MATCH TO INSERT:', JSON.stringify(matches[0], null, 2));
+      
       const { data: insertedMatches, error: matchesError } = await supabaseAdmin
         .from('matches')
         .insert(matches)
         .select();
+      
+      console.log('🚀 SUPABASE INSERT COMPLETED');
 
       if (matchesError) {
         console.error('❌ Error creating matches:', matchesError);
@@ -126,12 +131,21 @@ export const createCompetitionProcedure = protectedProcedure
 
       console.log('✅ INSERTED MATCHES COUNT:', insertedMatches?.length);
       if (insertedMatches && insertedMatches.length > 0) {
-        console.log('✅ FIRST INSERTED MATCH:');
+        console.log('✅ FIRST INSERTED MATCH FULL OBJECT:');
+        console.log(JSON.stringify(insertedMatches[0], null, 2));
         const firstMatch = insertedMatches[0];
         console.log('  ID:', firstMatch.id);
-        console.log('  Stage:', firstMatch.stage);
-        console.log('  Match Order:', firstMatch.match_order);
+        console.log('  Stage:', firstMatch.stage, '(type:', typeof firstMatch.stage, ')');
+        console.log('  Match Order:', firstMatch.match_order, '(type:', typeof firstMatch.match_order, ')');
         console.log('  Status:', firstMatch.status);
+        
+        // Verify in database immediately
+        const { data: verifyMatch } = await supabaseAdmin
+          .from('matches')
+          .select('id, stage, match_order, status')
+          .eq('id', firstMatch.id)
+          .single();
+        console.log('🔍 VERIFICATION READ FROM DB:', JSON.stringify(verifyMatch, null, 2));
       }
       console.log(`Created ${matches.length} matches for competition ${competition.id}`);
 
