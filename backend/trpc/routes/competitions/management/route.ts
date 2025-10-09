@@ -138,6 +138,15 @@ function getInitialStage(participantCount: number): string {
   return 'final';
 }
 
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 function generateMatches(
   competitionId: string,
   participantIds: string[],
@@ -187,12 +196,16 @@ function generateMatches(
     const stage = getInitialStage(participantIds.length);
     let matchOrder = 1;
     
-    for (let i = 0; i < participantIds.length; i += 2) {
-      if (i + 1 < participantIds.length) {
+    // Randomize participant order for knockout tournaments
+    const shuffledParticipants = shuffleArray(participantIds);
+    console.log('🎲 Shuffled participants for knockout:', shuffledParticipants);
+    
+    for (let i = 0; i < shuffledParticipants.length; i += 2) {
+      if (i + 1 < shuffledParticipants.length) {
         matches.push({
           competition_id: competitionId,
-          home_player_id: participantIds[i],
-          away_player_id: participantIds[i + 1],
+          home_player_id: shuffledParticipants[i],
+          away_player_id: shuffledParticipants[i + 1],
           status: 'scheduled',
           scheduled_time: scheduledTime,
           stage: stage,
