@@ -97,15 +97,19 @@ export const createCompetitionProcedure = protectedProcedure
     );
 
     if (matches.length > 0) {
-      const { error: matchesError } = await supabaseAdmin
+      console.log('🔍 ABOUT TO INSERT MATCHES:', JSON.stringify(matches, null, 2));
+      
+      const { data: insertedMatches, error: matchesError } = await supabaseAdmin
         .from('matches')
-        .insert(matches);
+        .insert(matches)
+        .select();
 
       if (matchesError) {
-        console.error('Error creating matches:', matchesError);
+        console.error('❌ Error creating matches:', matchesError);
         throw new Error('Failed to create matches: ' + matchesError.message);
       }
 
+      console.log('✅ INSERTED MATCHES:', JSON.stringify(insertedMatches, null, 2));
       console.log(`Created ${matches.length} matches for competition ${competition.id}`);
 
       const { error: updateError } = await supabaseAdmin
