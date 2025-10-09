@@ -20,7 +20,7 @@ export const deleteMatchProcedure = protectedProcedure
 
       const { data: player } = await supabase
         .from("players")
-        .select("id")
+        .select("id, role")
         .eq("auth_user_id", ctx.user.id)
         .single();
 
@@ -39,9 +39,12 @@ export const deleteMatchProcedure = protectedProcedure
         throw new Error("Match not found");
       }
 
+      const isSuperAdmin = player.role === 'super_admin';
       const groupAdminId = (match.competitions as any).groups.admin_id;
-      if (groupAdminId !== player.id) {
-        throw new Error("Only group admins can delete matches");
+      const isGroupAdmin = groupAdminId === player.id;
+
+      if (!isSuperAdmin && !isGroupAdmin) {
+        throw new Error("Only group admins and superadmins can delete matches");
       }
 
       const { error: deleteError } = await supabase
