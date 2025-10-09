@@ -226,6 +226,8 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
             scheduledTime: m.scheduled_time,
             completedAt: m.completed_at,
             youtubeLink: m.youtube_link,
+            stage: m.stage,
+            match_order: m.match_order,
           }));
 
           return {
