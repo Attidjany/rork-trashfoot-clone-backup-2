@@ -51,7 +51,19 @@ export default function TournamentBracketScreen() {
   }, [activeGroup, id]);
 
   const bracketData = useMemo(() => {
-    if (!tournament || !activeGroup) return null;
+    if (!tournament || !activeGroup) {
+      console.log('❌ No tournament or activeGroup:', { tournament: !!tournament, activeGroup: !!activeGroup });
+      return null;
+    }
+
+    console.log('🏆 Tournament data:', {
+      id: tournament.id,
+      name: tournament.name,
+      participantsCount: tournament.participants.length,
+      matchesCount: tournament.matches.length,
+      participants: tournament.participants,
+      matches: tournament.matches,
+    });
 
     const participants = tournament.participants.map(pid => 
       activeGroup.members.find(m => m.id === pid)
@@ -83,6 +95,12 @@ export default function TournamentBracketScreen() {
     // Build brackets based on actual stages present
     const brackets: BracketMatch[][] = [];
     const stagesPresent = stageOrder.filter(stage => matchesByStage[stage] && matchesByStage[stage].length > 0);
+    
+    console.log('📊 Bracket building:', {
+      totalMatches: matches.length,
+      matchesByStage,
+      stagesPresent,
+    });
     
     stagesPresent.forEach((stage, roundIndex) => {
       const stageMatches = matchesByStage[stage];
@@ -139,6 +157,12 @@ export default function TournamentBracketScreen() {
         winner,
       }]);
     }
+
+    console.log('✅ Bracket data built:', {
+      bracketsCount: brackets.length,
+      totalRounds: brackets.length,
+      participantsCount: participants.length,
+    });
 
     return { brackets, totalRounds: brackets.length, participants, stagesPresent };
   }, [tournament, activeGroup]);
@@ -330,7 +354,7 @@ export default function TournamentBracketScreen() {
     );
   }
   
-  if (!tournament || !bracketData) {
+  if (!tournament) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -339,6 +363,41 @@ export default function TournamentBracketScreen() {
             <ArrowLeft size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Tournament Not Found</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!bracketData || bracketData.brackets.length === 0) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{tournament.name}</Text>
+        </View>
+        <View style={styles.tournamentInfo}>
+          <View style={styles.infoItem}>
+            <Trophy size={16} color="#8B5CF6" />
+            <Text style={styles.infoText}>Knockout Tournament</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Users size={16} color="#64748B" />
+            <Text style={styles.infoText}>{tournament.participants.length} Players</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Calendar size={16} color="#64748B" />
+            <Text style={styles.infoText}>
+              {new Date(tournament.startDate).toLocaleDateString()}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.emptyState}>
+          <Trophy size={64} color="#64748B" />
+          <Text style={styles.emptyTitle}>No Matches Yet</Text>
+          <Text style={styles.emptyText}>Matches will appear here once they are created</Text>
         </View>
       </View>
     );
@@ -763,5 +822,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600' as const,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '600' as const,
+    color: '#fff',
+    marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#64748B',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
