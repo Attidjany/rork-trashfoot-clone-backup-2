@@ -1,8 +1,6 @@
--- Fix tournament completion logic and winner message
--- This ensures the tournament is only marked complete when BOTH final and 3rd place are done
--- And sends the correct podium message with winner, runner-up, and 3rd place
+-- Fix tournament winner message to always show the final match winner
+-- The issue was that the trigger could be fired by either final or third_place completion
 
--- Drop and recreate the stage progression function with fixes
 CREATE OR REPLACE FUNCTION create_next_stage_matches()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -20,6 +18,7 @@ DECLARE
   v_match_order INTEGER;
   v_group_id UUID;
   v_created_by UUID;
+  v_sender_id UUID;
   v_final_completed BOOLEAN;
   v_third_place_completed BOOLEAN;
   v_winner_id UUID;
@@ -28,6 +27,10 @@ DECLARE
   v_winner_name TEXT;
   v_runner_up_name TEXT;
   v_third_place_name TEXT;
+  v_final_home_score INTEGER;
+  v_final_away_score INTEGER;
+  v_final_home_player UUID;
+  v_final_away_player UUID;
 BEGIN
   IF NEW.status != 'completed' OR OLD.status = 'completed' THEN
     RETURN NEW;
@@ -40,6 +43,12 @@ BEGIN
 
   IF v_competition_type != 'tournament' OR v_tournament_type != 'knockout' THEN
     RETURN NEW;
+  END IF;
+
+  -- Get sender_id: use created_by if available, otherwise use group admin
+  v_sender_id := v_created_by;
+  IF v_sender_id IS NULL THEN
+    SELECT admin_id INTO v_sender_id FROM groups WHERE id = v_group_id;
   END IF;
 
   v_current_stage := NEW.stage;
@@ -58,20 +67,33 @@ BEGIN
 
     -- Only complete tournament when BOTH are done
     IF v_final_completed AND v_third_place_completed THEN
-      -- Get winner (from final)
+      -- Get final match details explicitly
       SELECT 
-        CASE WHEN home_score > away_score THEN home_player_id ELSE away_player_id END,
-        CASE WHEN home_score > away_score THEN away_player_id ELSE home_player_id END
-      INTO v_winner_id, v_runner_up_id
+        home_player_id,
+        away_player_id,
+        home_score,
+        away_score
+      INTO v_final_home_player, v_final_away_player, v_final_home_score, v_final_away_score
       FROM matches
-      WHERE competition_id = v_competition_id AND stage = 'final' AND status = 'completed';
+      WHERE competition_id = v_competition_id AND stage = 'final' AND status = 'completed'
+      LIMIT 1;
+
+      -- Determine winner and runner-up from final match
+      IF v_final_home_score > v_final_away_score THEN
+        v_winner_id := v_final_home_player;
+        v_runner_up_id := v_final_away_player;
+      ELSE
+        v_winner_id := v_final_away_player;
+        v_runner_up_id := v_final_home_player;
+      END IF;
 
       -- Get third place winner
       SELECT 
         CASE WHEN home_score > away_score THEN home_player_id ELSE away_player_id END
       INTO v_third_place_id
       FROM matches
-      WHERE competition_id = v_competition_id AND stage = 'third_place' AND status = 'completed';
+      WHERE competition_id = v_competition_id AND stage = 'third_place' AND status = 'completed'
+      LIMIT 1;
 
       -- Get player names
       SELECT name INTO v_winner_name FROM players WHERE id = v_winner_id;
@@ -93,7 +115,7 @@ BEGIN
         metadata
       ) VALUES (
         v_group_id,
-        v_created_by,
+        v_sender_id,
         'System',
         '🏆 Tournament Complete! 🏆',
         'competition_finished',
@@ -151,7 +173,8 @@ BEGIN
   AND stage = v_current_stage
   AND status = 'completed';
 
-  v_winners := ARRAY(SELECT unnest(v_winners) WHERE unnest IS NOT NULL);
+  -- Remove NULL values from array
+  v_winners := ARRAY(SELECT x FROM unnest(v_winners) x WHERE x IS NOT NULL);
 
   IF v_next_stage = 'final' THEN
     SELECT ARRAY_AGG(
@@ -168,7 +191,8 @@ BEGIN
     AND stage = v_current_stage
     AND status = 'completed';
     
-    v_losers := ARRAY(SELECT unnest(v_losers) WHERE unnest IS NOT NULL);
+    -- Remove NULL values from array
+    v_losers := ARRAY(SELECT x FROM unnest(v_losers) x WHERE x IS NOT NULL);
   END IF;
 
   v_match_order := 1;
@@ -226,7 +250,7 @@ BEGIN
       metadata
     ) VALUES (
       v_group_id,
-      v_created_by,
+      v_sender_id,
       'System',
       '🥉 3rd Place Match has been created!',
       'match_result',
@@ -243,7 +267,7 @@ BEGIN
     metadata
   ) VALUES (
     v_group_id,
-    v_created_by,
+    v_sender_id,
     'System',
     CASE 
       WHEN v_next_stage = 'final' THEN '🏆 Final match has been created!'
