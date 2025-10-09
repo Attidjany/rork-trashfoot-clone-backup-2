@@ -1,5 +1,4 @@
 import { createTRPCRouter } from "./create-context";
-import { hiProcedure } from "./routes/example/hi/route";
 import { registerProcedure } from "./routes/auth/register/route";
 import { loginProcedure } from "./routes/auth/login/route";
 import { oauthLoginProcedure } from "./routes/auth/oauth-login/route";
@@ -15,9 +14,6 @@ import { getAllAccountsProcedure, deleteAccountProcedure, getAccountStatsProcedu
 import { getAllGroupsProcedure, deleteGroupProcedure, removeUserFromGroupProcedure, deleteMatchProcedure as superadminDeleteMatchProcedure, correctMatchScoreProcedure as superadminCorrectMatchScoreProcedure, manageJoinRequestProcedure, deleteCompetitionProcedure, assignGroupAdminProcedure, deletePlayerProcedure, getAllMatchesProcedure, getAllCompetitionsProcedure, getAllPlayersProcedure, getPlatformStatsProcedure } from "./routes/admin/superadmin/route";
 
 export const appRouter = createTRPCRouter({
-  example: createTRPCRouter({
-    hi: hiProcedure,
-  }),
   auth: createTRPCRouter({
     register: registerProcedure,
     login: loginProcedure,
