@@ -111,6 +111,8 @@ export const createCompetitionProcedure = protectedProcedure
         });
       });
       
+      console.log('🔍 FULL MATCH OBJECTS TO INSERT:', JSON.stringify(matches, null, 2));
+      
       const { data: insertedMatches, error: matchesError } = await supabaseAdmin
         .from('matches')
         .insert(matches)
