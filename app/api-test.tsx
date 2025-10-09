@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { trpc } from '@/lib/trpc';
 
 export default function ApiTestScreen() {
   const [apiStatus, setApiStatus] = useState<string>('Checking...');
@@ -39,21 +38,9 @@ export default function ApiTestScreen() {
     }
   };
 
-  // Test tRPC endpoint
-  const hiQuery = trpc.example.hi.useQuery(
-    { name: 'Test User' },
-    {
-      retry: false,
-    }
-  );
-
   useEffect(() => {
-    if (hiQuery.data) {
-      setTrpcStatus(`✅ tRPC Working: ${hiQuery.data.message}`);
-    } else if (hiQuery.error) {
-      setTrpcStatus(`❌ tRPC Error: ${hiQuery.error.message}`);
-    }
-  }, [hiQuery.data, hiQuery.error]);
+    setTrpcStatus('ℹ️ tRPC test removed - example.hi endpoint no longer exists');
+  }, []);
 
   useEffect(() => {
     testApi();
@@ -76,14 +63,8 @@ export default function ApiTestScreen() {
           <Text style={styles.sectionTitle}>tRPC Test</Text>
           <Text style={styles.status}>{trpcStatus}</Text>
           <Text style={styles.info}>
-            Loading: {hiQuery.isLoading ? 'Yes' : 'No'}
+            Note: example.hi endpoint has been removed
           </Text>
-          <Text style={styles.info}>
-            Error: {hiQuery.error ? hiQuery.error.message : 'None'}
-          </Text>
-          <TouchableOpacity style={styles.button} onPress={() => hiQuery.refetch()}>
-            <Text style={styles.buttonText}>Test tRPC Again</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>

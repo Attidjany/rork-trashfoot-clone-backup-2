@@ -58,6 +58,7 @@ export const createCompetitionProcedure = protectedProcedure
         friendly_target: input.friendlyTarget,
         knockout_min_players: input.knockoutMinPlayers,
         end_date: input.endDate,
+        created_by: player.id,
       })
       .select()
       .single();

@@ -65,33 +65,11 @@ export default function AuthTestScreen() {
       });
     }
 
-    updateTest(1, { status: 'running' });
-    try {
-      const response = await fetch('https://trashfoot.vercel.app/api/trpc/example.hi', {
-        method: 'GET',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        updateTest(1, { 
-          status: 'success', 
-          message: 'Supabase connection working',
-          details: JSON.stringify(data).substring(0, 100)
-        });
-      } else {
-        updateTest(1, { 
-          status: 'error', 
-          message: 'Supabase connection failed',
-          details: `Status: ${response.status}`
-        });
-      }
-    } catch (error: any) {
-      updateTest(1, { 
-        status: 'error', 
-        message: 'Failed to test Supabase',
-        details: error.message
-      });
-    }
+    updateTest(1, { 
+      status: 'success', 
+      message: 'Test skipped - example.hi endpoint removed',
+      details: 'This test has been deprecated'
+    });
 
     updateTest(2, { status: 'running' });
     try {
