@@ -425,17 +425,17 @@ END $$;
 -- PART 4: Ensure Realtime is Enabled
 -- ============================================
 
-DO $$ 
+DO $ 
 BEGIN
   BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE IF EXISTS matches;
+    ALTER PUBLICATION supabase_realtime ADD TABLE matches;
   EXCEPTION
     WHEN duplicate_object THEN
       NULL;
     WHEN undefined_object THEN
       NULL;
   END;
-END $$;
+END $;
 
 -- ============================================
 -- VERIFICATION QUERIES
