@@ -205,7 +205,9 @@ export default function MatchesScreen() {
             console.error('❌ Error deleting match:', error);
             Alert.alert('Error', 'Failed to delete match');
           } else {
-            console.log('✅ Match deleted successfully, realtime will update UI');
+            console.log('✅ Match deleted successfully');
+            await refetchGroups();
+            Alert.alert('Success', 'Match deleted successfully');
           }
         } catch (error: any) {
           console.error('❌ Error deleting match:', error);
@@ -233,7 +235,9 @@ export default function MatchesScreen() {
                   console.error('❌ Error deleting match:', error);
                   Alert.alert('Error', 'Failed to delete match');
                 } else {
-                  console.log('✅ Match deleted successfully, realtime will update UI');
+                  console.log('✅ Match deleted successfully');
+                  await refetchGroups();
+                  Alert.alert('Success', 'Match deleted successfully');
                 }
               } catch (error: any) {
                 console.error('❌ Error deleting match:', error);
