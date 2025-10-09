@@ -92,17 +92,17 @@ export default function TournamentBracketScreen() {
       });
     });
     
-    // Build brackets based on actual stages present
+    // Build brackets based on actual stages present (excluding third_place)
     const brackets: BracketMatch[][] = [];
-    const stagesPresent = stageOrder.filter(stage => matchesByStage[stage] && matchesByStage[stage].length > 0);
+    const mainStages = stageOrder.filter(stage => stage !== 'third_place' && matchesByStage[stage] && matchesByStage[stage].length > 0);
     
     console.log('📊 Bracket building:', {
       totalMatches: matches.length,
       matchesByStage,
-      stagesPresent,
+      mainStages,
     });
     
-    stagesPresent.forEach((stage, roundIndex) => {
+    mainStages.forEach((stage, roundIndex) => {
       const stageMatches = matchesByStage[stage];
       brackets[roundIndex] = [];
       
@@ -131,7 +131,8 @@ export default function TournamentBracketScreen() {
       });
     });
     
-    // Handle third place match separately
+    // Handle third place match separately - add it as a separate round ONLY if it exists
+    let thirdPlaceBracket: BracketMatch | null = null;
     if (matchesByStage['third_place'] && matchesByStage['third_place'].length > 0) {
       const thirdPlaceMatch = matchesByStage['third_place'][0];
       const homePlayer = activeGroup.members.find(m => m.id === thirdPlaceMatch.homePlayerId);
@@ -146,8 +147,7 @@ export default function TournamentBracketScreen() {
         }
       }
       
-      // Add third place as a separate round
-      brackets.push([{
+      thirdPlaceBracket = {
         id: 'third_place-0',
         homePlayer: homePlayer || null,
         awayPlayer: awayPlayer || null,
@@ -155,7 +155,10 @@ export default function TournamentBracketScreen() {
         round: brackets.length,
         position: 0,
         winner,
-      }]);
+      };
+      
+      // Add third place as a separate round
+      brackets.push([thirdPlaceBracket]);
     }
 
     console.log('✅ Bracket data built:', {
@@ -164,7 +167,7 @@ export default function TournamentBracketScreen() {
       participantsCount: participants.length,
     });
 
-    return { brackets, totalRounds: brackets.length, participants, stagesPresent };
+    return { brackets, totalRounds: brackets.length, participants, stagesPresent: mainStages, thirdPlaceBracket };
   }, [tournament, activeGroup]);
 
   const handleSubmitResult = async () => {
@@ -233,7 +236,12 @@ export default function TournamentBracketScreen() {
 
   const getRoundName = (round: number, totalRounds: number) => {
     if (!bracketData) return '';
-    const { stagesPresent } = bracketData as any;
+    const { stagesPresent, thirdPlaceBracket } = bracketData as any;
+    
+    // Check if this is the third place round (last round if third place exists)
+    if (thirdPlaceBracket && round === totalRounds - 1) {
+      return '3rd Place';
+    }
     
     if (stagesPresent && stagesPresent[round]) {
       const stage = stagesPresent[round];
@@ -242,14 +250,10 @@ export default function TournamentBracketScreen() {
         case 'quarter_final': return 'Quarter-Final';
         case 'semi_final': return 'Semi-Final';
         case 'final': return 'Final';
-        case 'third_place': return '3rd Place';
         default: return stage;
       }
     }
     
-    if (round === totalRounds - 1) return 'Final';
-    if (round === totalRounds - 2) return 'Semi-Final';
-    if (round === totalRounds - 3) return 'Quarter-Final';
     return `Round ${round + 1}`;
   };
 
