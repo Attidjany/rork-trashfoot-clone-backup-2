@@ -58,79 +58,89 @@ export default function TournamentBracketScreen() {
     ).filter(Boolean) as Player[];
 
     const matches = tournament.matches;
-    const totalRounds = Math.ceil(Math.log2(participants.length));
-    const brackets: BracketMatch[][] = [];
-
-    // Initialize bracket structure
-    for (let round = 0; round < totalRounds; round++) {
-      const matchesInRound = Math.pow(2, totalRounds - round - 1);
-      brackets[round] = [];
-      
-      for (let position = 0; position < matchesInRound; position++) {
-        brackets[round][position] = {
-          id: `${round}-${position}`,
-          homePlayer: null,
-          awayPlayer: null,
-          match: null,
-          round,
-          position,
-          winner: null,
-        };
-      }
-    }
-
-    // Fill first round with participants
-    if (brackets[0]) {
-      for (let i = 0; i < participants.length && i < brackets[0].length * 2; i += 2) {
-        const bracketIndex = Math.floor(i / 2);
-        if (brackets[0][bracketIndex]) {
-          brackets[0][bracketIndex].homePlayer = participants[i] || null;
-          brackets[0][bracketIndex].awayPlayer = participants[i + 1] || null;
-        }
-      }
-    }
-
-    // Map matches to bracket positions
+    
+    // Group matches by stage
+    const stageOrder = ['round_of_16', 'quarter_final', 'semi_final', 'final', 'third_place'];
+    const matchesByStage: { [key: string]: Match[] } = {};
+    
     matches.forEach(match => {
-      const homePlayer = activeGroup.members.find(m => m.id === match.homePlayerId);
-      const awayPlayer = activeGroup.members.find(m => m.id === match.awayPlayerId);
+      const stage = (match as any).stage || 'unknown';
+      if (!matchesByStage[stage]) {
+        matchesByStage[stage] = [];
+      }
+      matchesByStage[stage].push(match);
+    });
+    
+    // Sort matches within each stage by match_order
+    Object.keys(matchesByStage).forEach(stage => {
+      matchesByStage[stage].sort((a, b) => {
+        const orderA = (a as any).match_order || 0;
+        const orderB = (b as any).match_order || 0;
+        return orderA - orderB;
+      });
+    });
+    
+    // Build brackets based on actual stages present
+    const brackets: BracketMatch[][] = [];
+    const stagesPresent = stageOrder.filter(stage => matchesByStage[stage] && matchesByStage[stage].length > 0);
+    
+    stagesPresent.forEach((stage, roundIndex) => {
+      const stageMatches = matchesByStage[stage];
+      brackets[roundIndex] = [];
       
-      // Find the bracket position for this match
-      for (let round = 0; round < brackets.length; round++) {
-        for (let pos = 0; pos < brackets[round].length; pos++) {
-          const bracket = brackets[round][pos];
-          if (bracket.homePlayer?.id === homePlayer?.id && 
-              bracket.awayPlayer?.id === awayPlayer?.id) {
-            bracket.match = match;
-            
-            // Set winner if match is completed
-            if (match.status === 'completed' && match.homeScore !== undefined && match.awayScore !== undefined) {
-              if (match.homeScore > match.awayScore) {
-                bracket.winner = homePlayer || null;
-              } else if (match.awayScore > match.homeScore) {
-                bracket.winner = awayPlayer || null;
-              }
-              
-              // Advance winner to next round
-              if (bracket.winner && round < brackets.length - 1) {
-                const nextRoundPos = Math.floor(pos / 2);
-                const nextBracket = brackets[round + 1][nextRoundPos];
-                if (nextBracket) {
-                  if (pos % 2 === 0) {
-                    nextBracket.homePlayer = bracket.winner;
-                  } else {
-                    nextBracket.awayPlayer = bracket.winner;
-                  }
-                }
-              }
-            }
-            break;
+      stageMatches.forEach((match, position) => {
+        const homePlayer = activeGroup.members.find(m => m.id === match.homePlayerId);
+        const awayPlayer = activeGroup.members.find(m => m.id === match.awayPlayerId);
+        
+        let winner: Player | null = null;
+        if (match.status === 'completed' && match.homeScore !== undefined && match.awayScore !== undefined) {
+          if (match.homeScore > match.awayScore) {
+            winner = homePlayer || null;
+          } else if (match.awayScore > match.homeScore) {
+            winner = awayPlayer || null;
           }
         }
-      }
+        
+        brackets[roundIndex][position] = {
+          id: `${stage}-${position}`,
+          homePlayer: homePlayer || null,
+          awayPlayer: awayPlayer || null,
+          match: match,
+          round: roundIndex,
+          position,
+          winner,
+        };
+      });
     });
+    
+    // Handle third place match separately
+    if (matchesByStage['third_place'] && matchesByStage['third_place'].length > 0) {
+      const thirdPlaceMatch = matchesByStage['third_place'][0];
+      const homePlayer = activeGroup.members.find(m => m.id === thirdPlaceMatch.homePlayerId);
+      const awayPlayer = activeGroup.members.find(m => m.id === thirdPlaceMatch.awayPlayerId);
+      
+      let winner: Player | null = null;
+      if (thirdPlaceMatch.status === 'completed' && thirdPlaceMatch.homeScore !== undefined && thirdPlaceMatch.awayScore !== undefined) {
+        if (thirdPlaceMatch.homeScore > thirdPlaceMatch.awayScore) {
+          winner = homePlayer || null;
+        } else if (thirdPlaceMatch.awayScore > thirdPlaceMatch.homeScore) {
+          winner = awayPlayer || null;
+        }
+      }
+      
+      // Add third place as a separate round
+      brackets.push([{
+        id: 'third_place-0',
+        homePlayer: homePlayer || null,
+        awayPlayer: awayPlayer || null,
+        match: thirdPlaceMatch,
+        round: brackets.length,
+        position: 0,
+        winner,
+      }]);
+    }
 
-    return { brackets, totalRounds, participants };
+    return { brackets, totalRounds: brackets.length, participants, stagesPresent };
   }, [tournament, activeGroup]);
 
   const handleSubmitResult = async () => {
@@ -198,6 +208,21 @@ export default function TournamentBracketScreen() {
   };
 
   const getRoundName = (round: number, totalRounds: number) => {
+    if (!bracketData) return '';
+    const { stagesPresent } = bracketData as any;
+    
+    if (stagesPresent && stagesPresent[round]) {
+      const stage = stagesPresent[round];
+      switch (stage) {
+        case 'round_of_16': return 'Round of 16';
+        case 'quarter_final': return 'Quarter-Final';
+        case 'semi_final': return 'Semi-Final';
+        case 'final': return 'Final';
+        case 'third_place': return '3rd Place';
+        default: return stage;
+      }
+    }
+    
     if (round === totalRounds - 1) return 'Final';
     if (round === totalRounds - 2) return 'Semi-Final';
     if (round === totalRounds - 3) return 'Quarter-Final';
