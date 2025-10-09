@@ -119,7 +119,7 @@ export const createCompetitionProcedure = protectedProcedure
       const { data: insertedMatches, error: matchesError } = await supabaseAdmin
         .from('matches')
         .insert(matches)
-        .select();
+        .select('id, competition_id, home_player_id, away_player_id, status, scheduled_time, stage, match_order');
       
       console.log('🚀 SUPABASE INSERT COMPLETED');
 
@@ -197,7 +197,15 @@ function generateMatches(
   tournamentType?: 'knockout' | 'group_stage' | 'mixed',
   deadline?: Date | null
 ) {
-  const matches: any[] = [];
+  const matches: {
+    competition_id: string;
+    home_player_id: string;
+    away_player_id: string;
+    status: string;
+    scheduled_time: string;
+    stage?: string;
+    match_order?: number;
+  }[] = [];
   const scheduledTime = deadline ? deadline.toISOString() : new Date(Date.now() + 7 * 86400000).toISOString();
 
   if (type === 'league') {
@@ -207,7 +215,7 @@ function generateMatches(
           competition_id: competitionId,
           home_player_id: participantIds[i],
           away_player_id: participantIds[j],
-          status: 'scheduled',
+          status: 'scheduled' as const,
           scheduled_time: scheduledTime,
         });
 
@@ -216,7 +224,7 @@ function generateMatches(
             competition_id: competitionId,
             home_player_id: participantIds[j],
             away_player_id: participantIds[i],
-            status: 'scheduled',
+            status: 'scheduled' as const,
             scheduled_time: scheduledTime,
           });
         }
@@ -229,7 +237,7 @@ function generateMatches(
         competition_id: competitionId,
         home_player_id: participantIds[0],
         away_player_id: participantIds[1],
-        status: 'scheduled',
+        status: 'scheduled' as const,
         scheduled_time: scheduledTime,
       });
     }
@@ -237,7 +245,6 @@ function generateMatches(
     const stage = getInitialStage(participantIds.length);
     let matchOrder = 1;
     
-    // Randomize participant order for knockout tournaments
     const shuffledParticipants = shuffleArray(participantIds);
     console.log('🎲 Shuffled participants for knockout:', shuffledParticipants);
     console.log('🏆 Creating knockout tournament with stage:', stage);
@@ -248,7 +255,7 @@ function generateMatches(
           competition_id: competitionId,
           home_player_id: shuffledParticipants[i],
           away_player_id: shuffledParticipants[i + 1],
-          status: 'scheduled',
+          status: 'scheduled' as const,
           scheduled_time: scheduledTime,
           stage: stage,
           match_order: matchOrder,
@@ -261,6 +268,7 @@ function generateMatches(
     console.log(`✅ Created ${matches.length} matches for stage ${stage}`);
   }
 
+  console.log('🔥 FINAL MATCHES ARRAY BEFORE RETURN:', JSON.stringify(matches, null, 2));
   return matches;
 }
 
