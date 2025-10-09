@@ -96,8 +96,20 @@ export const createCompetitionProcedure = protectedProcedure
       deadline
     );
 
+    console.log('🎯 GENERATED MATCHES COUNT:', matches.length);
+    console.log('🎯 COMPETITION TYPE:', input.type, 'TOURNAMENT TYPE:', input.tournamentType);
+    
     if (matches.length > 0) {
-      console.log('🔍 ABOUT TO INSERT MATCHES:', JSON.stringify(matches, null, 2));
+      console.log('🔍 ABOUT TO INSERT MATCHES:');
+      matches.forEach((match, idx) => {
+        console.log(`  Match ${idx + 1}:`, {
+          home: match.home_player_id?.substring(0, 8),
+          away: match.away_player_id?.substring(0, 8),
+          stage: match.stage,
+          match_order: match.match_order,
+          status: match.status,
+        });
+      });
       
       const { data: insertedMatches, error: matchesError } = await supabaseAdmin
         .from('matches')
@@ -106,10 +118,19 @@ export const createCompetitionProcedure = protectedProcedure
 
       if (matchesError) {
         console.error('❌ Error creating matches:', matchesError);
+        console.error('❌ Error details:', JSON.stringify(matchesError, null, 2));
         throw new Error('Failed to create matches: ' + matchesError.message);
       }
 
-      console.log('✅ INSERTED MATCHES:', JSON.stringify(insertedMatches, null, 2));
+      console.log('✅ INSERTED MATCHES COUNT:', insertedMatches?.length);
+      if (insertedMatches && insertedMatches.length > 0) {
+        console.log('✅ FIRST INSERTED MATCH:');
+        const firstMatch = insertedMatches[0];
+        console.log('  ID:', firstMatch.id);
+        console.log('  Stage:', firstMatch.stage);
+        console.log('  Match Order:', firstMatch.match_order);
+        console.log('  Status:', firstMatch.status);
+      }
       console.log(`Created ${matches.length} matches for competition ${competition.id}`);
 
       const { error: updateError } = await supabaseAdmin
