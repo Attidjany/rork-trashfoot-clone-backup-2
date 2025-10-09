@@ -64,7 +64,7 @@ export default function TournamentBracketScreen() {
     const matchesByStage: { [key: string]: Match[] } = {};
     
     matches.forEach(match => {
-      const stage = (match as any).stage || 'unknown';
+      const stage = match.stage || 'unknown';
       if (!matchesByStage[stage]) {
         matchesByStage[stage] = [];
       }
@@ -74,8 +74,8 @@ export default function TournamentBracketScreen() {
     // Sort matches within each stage by match_order
     Object.keys(matchesByStage).forEach(stage => {
       matchesByStage[stage].sort((a, b) => {
-        const orderA = (a as any).match_order || 0;
-        const orderB = (b as any).match_order || 0;
+        const orderA = a.match_order || 0;
+        const orderB = b.match_order || 0;
         return orderA - orderB;
       });
     });

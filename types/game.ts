@@ -114,6 +114,8 @@ export interface Match {
   scheduledTime: string;
   youtubeLink?: string;
   completedAt?: string;
+  stage?: string;
+  match_order?: number;
 }
 
 export interface ChatMessage {
