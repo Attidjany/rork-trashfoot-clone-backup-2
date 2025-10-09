@@ -43,7 +43,16 @@ USING (
 );
 
 -- Ensure realtime is enabled for matches table
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS matches;
+DO $$ 
+BEGIN
+  -- Try to add the table to the publication, ignore if already exists
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE matches;
+  EXCEPTION
+    WHEN duplicate_object THEN
+      NULL;
+  END;
+END $$;
 
 -- PART 2: Tournament Stage Progression System
 -- ============================================
