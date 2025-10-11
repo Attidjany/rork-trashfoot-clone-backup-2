@@ -52,7 +52,7 @@ export default function MatchesScreen() {
     };
     fetchCurrentPlayerId();
   }, [user?.id]);
-  const [selectedTab, setSelectedTab] = useState<'upcoming' | 'live' | 'completed' | 'tournaments'>('upcoming');
+  const [selectedTab, setSelectedTab] = useState<'upcoming' | 'live' | 'completed' | 'archived' | 'friendly' | 'tournaments'>('upcoming');
   const [resultModal, setResultModal] = useState(false);
   const [youtubeModal, setYoutubeModal] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -80,7 +80,13 @@ export default function MatchesScreen() {
     );
   }
 
-  const allMatches = activeGroup.competitions.flatMap(c => c.matches);
+  const activeCompetitions = activeGroup.competitions.filter(c => c.status !== 'completed');
+  const completedCompetitions = activeGroup.competitions.filter(c => c.status === 'completed');
+  const friendlyCompetitions = activeGroup.competitions.filter(c => c.type === 'friendly');
+  
+  const allActiveMatches = activeCompetitions.flatMap(c => c.matches);
+  const allArchivedMatches = completedCompetitions.flatMap(c => c.matches);
+  const allFriendlyMatches = friendlyCompetitions.flatMap(c => c.matches);
   
   const sortMatchesByPlayerInvolvement = (matches: Match[]) => {
     if (!currentPlayerId) return matches;
@@ -96,18 +102,51 @@ export default function MatchesScreen() {
     });
   };
   
-  const upcomingMatches = sortMatchesByPlayerInvolvement(allMatches.filter(m => m.status === 'scheduled'));
-  const liveMatches = sortMatchesByPlayerInvolvement(allMatches.filter(m => m.status === 'live'));
-  const completedMatches = allMatches.filter(m => m.status === 'completed')
+  const sortMatchesByPlayerFirst = (matches: Match[]) => {
+    if (!currentPlayerId) return matches;
+    
+    const playerMatches = matches.filter(m => m.homePlayerId === currentPlayerId || m.awayPlayerId === currentPlayerId);
+    const otherMatches = matches.filter(m => m.homePlayerId !== currentPlayerId && m.awayPlayerId !== currentPlayerId);
+    
+    return [...playerMatches, ...otherMatches];
+  };
+  
+  const upcomingMatches = sortMatchesByPlayerFirst(
+    allActiveMatches.filter(m => m.status === 'scheduled')
+  ).sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime());
+  
+  const liveMatches = sortMatchesByPlayerFirst(
+    allActiveMatches.filter(m => m.status === 'live')
+  );
+  
+  const completedMatches = allActiveMatches
+    .filter(m => m.status === 'completed')
     .sort((a, b) => {
-      const aIsPlayerMatch = a.homePlayerId === currentPlayerId || a.awayPlayerId === currentPlayerId;
-      const bIsPlayerMatch = b.homePlayerId === currentPlayerId || b.awayPlayerId === currentPlayerId;
-      
-      if (aIsPlayerMatch && !bIsPlayerMatch) return -1;
-      if (!aIsPlayerMatch && bIsPlayerMatch) return 1;
-      
-      return new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime();
+      if (!a.completedAt || !b.completedAt) return 0;
+      return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime();
     });
+  
+  const archivedMatches = allArchivedMatches
+    .filter(m => m.status === 'completed')
+    .sort((a, b) => {
+      if (!a.completedAt || !b.completedAt) return 0;
+      return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime();
+    });
+  
+  const friendlyMatches = allFriendlyMatches.sort((a, b) => {
+    if (a.status === 'scheduled' && b.status !== 'scheduled') return -1;
+    if (a.status !== 'scheduled' && b.status === 'scheduled') return 1;
+    if (a.status === 'live' && b.status !== 'live') return -1;
+    if (a.status !== 'live' && b.status === 'live') return 1;
+    
+    if (a.status === 'completed' && b.status === 'completed') {
+      if (!a.completedAt || !b.completedAt) return 0;
+      return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime();
+    }
+    
+    return new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime();
+  });
+  
   const knockoutTournaments = activeGroup.competitions.filter(c => c.type === 'tournament' && c.tournamentType === 'knockout');
 
   const handleSubmitResult = async () => {
@@ -129,7 +168,7 @@ export default function MatchesScreen() {
       return;
     }
     
-    const isGroupAdmin = activeGroup?.adminId === currentPlayerId;
+    const isGroupAdmin = activeGroup?.adminIds?.includes(currentPlayerId) || activeGroup?.adminId === currentPlayerId;
     const isHomePlayer = selectedMatch.homePlayerId === currentPlayerId;
     const isAwayPlayer = selectedMatch.awayPlayerId === currentPlayerId;
     
@@ -186,7 +225,7 @@ export default function MatchesScreen() {
       return;
     }
 
-    const isGroupAdmin = activeGroup?.adminId === currentPlayerId;
+    const isGroupAdmin = activeGroup?.adminIds?.includes(currentPlayerId) || activeGroup?.adminId === currentPlayerId;
     if (!isGroupAdmin) {
       Alert.alert('Error', 'Only group admins can delete matches');
       return;
@@ -479,7 +518,7 @@ export default function MatchesScreen() {
                 <Text style={styles.actionText}>Go Live</Text>
               </TouchableOpacity>
             )}
-            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId || activeGroup?.adminId === currentPlayerId) && (
+            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId || (currentPlayerId && activeGroup?.adminIds?.includes(currentPlayerId)) || activeGroup?.adminId === currentPlayerId) && (
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={(e) => {
@@ -492,7 +531,7 @@ export default function MatchesScreen() {
                 <Text style={styles.actionText}>Add Result</Text>
               </TouchableOpacity>
             )}
-            {activeGroup?.adminId === currentPlayerId && (
+            {((currentPlayerId && activeGroup?.adminIds?.includes(currentPlayerId)) || activeGroup?.adminId === currentPlayerId) && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.deleteButton]}
                 onPress={(e) => {
@@ -528,7 +567,7 @@ export default function MatchesScreen() {
                 <Text style={styles.actionText}>Watch</Text>
               </TouchableOpacity>
             )}
-            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId || activeGroup?.adminId === currentPlayerId) && (
+            {(currentPlayerId === match.homePlayerId || currentPlayerId === match.awayPlayerId || (currentPlayerId && activeGroup?.adminIds?.includes(currentPlayerId)) || activeGroup?.adminId === currentPlayerId) && (
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={(e) => {
@@ -544,7 +583,7 @@ export default function MatchesScreen() {
           </View>
         )}
         
-        {match.status === 'completed' && activeGroup?.adminId === currentPlayerId && (
+        {match.status === 'completed' && ((currentPlayerId && activeGroup?.adminIds?.includes(currentPlayerId)) || activeGroup?.adminId === currentPlayerId) && (
           <View style={styles.matchActions}>
             <TouchableOpacity
               style={styles.actionButton}
@@ -568,55 +607,80 @@ export default function MatchesScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Tab Selector */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'upcoming' && styles.activeTab]}
-          onPress={() => setSelectedTab('upcoming')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'upcoming' && styles.activeTabText]}>
-            Upcoming ({upcomingMatches.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'live' && styles.activeTab]}
-          onPress={() => setSelectedTab('live')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'live' && styles.activeTabText]}>
-            Live ({liveMatches.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'completed' && styles.activeTab]}
-          onPress={() => setSelectedTab('completed')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'completed' && styles.activeTabText]}>
-            Completed ({completedMatches.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'tournaments' && styles.activeTab]}
-          onPress={() => setSelectedTab('tournaments')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'tournaments' && styles.activeTabText]}>
-            Tournaments ({knockoutTournaments.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScrollContainer}>
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'upcoming' && styles.activeTab]}
+            onPress={() => setSelectedTab('upcoming')}
+          >
+            <Text style={[styles.tabText, selectedTab === 'upcoming' && styles.activeTabText]}>
+              Upcoming ({upcomingMatches.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'live' && styles.activeTab]}
+            onPress={() => setSelectedTab('live')}
+          >
+            <Text style={[styles.tabText, selectedTab === 'live' && styles.activeTabText]}>
+              Live ({liveMatches.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'completed' && styles.activeTab]}
+            onPress={() => setSelectedTab('completed')}
+          >
+            <Text style={[styles.tabText, selectedTab === 'completed' && styles.activeTabText]}>
+              Completed ({completedMatches.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'archived' && styles.activeTab]}
+            onPress={() => setSelectedTab('archived')}
+          >
+            <Text style={[styles.tabText, selectedTab === 'archived' && styles.activeTabText]}>
+              Archived ({archivedMatches.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'friendly' && styles.activeTab]}
+            onPress={() => setSelectedTab('friendly')}
+          >
+            <Text style={[styles.tabText, selectedTab === 'friendly' && styles.activeTabText]}>
+              Friendly ({friendlyMatches.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'tournaments' && styles.activeTab]}
+            onPress={() => setSelectedTab('tournaments')}
+          >
+            <Text style={[styles.tabText, selectedTab === 'tournaments' && styles.activeTabText]}>
+              Tournaments ({knockoutTournaments.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
 
       <ScrollView style={styles.matchList}>
         {selectedTab === 'upcoming' && upcomingMatches.map(renderMatch)}
         {selectedTab === 'live' && liveMatches.map(renderMatch)}
         {selectedTab === 'completed' && completedMatches.map(renderMatch)}
+        {selectedTab === 'archived' && archivedMatches.map(renderMatch)}
+        {selectedTab === 'friendly' && friendlyMatches.map(renderMatch)}
         {selectedTab === 'tournaments' && knockoutTournaments.map(renderTournament)}
 
         {((selectedTab === 'upcoming' && upcomingMatches.length === 0) ||
           (selectedTab === 'live' && liveMatches.length === 0) ||
           (selectedTab === 'completed' && completedMatches.length === 0) ||
+          (selectedTab === 'archived' && archivedMatches.length === 0) ||
+          (selectedTab === 'friendly' && friendlyMatches.length === 0) ||
           (selectedTab === 'tournaments' && knockoutTournaments.length === 0)) && (
           <View style={styles.emptyState}>
             <Calendar size={48} color="#64748B" />
             <Text style={styles.emptyStateText}>
-              {selectedTab === 'tournaments' ? 'No knockout tournaments' : `No ${selectedTab} matches`}
+              {selectedTab === 'tournaments' ? 'No knockout tournaments' : 
+               selectedTab === 'archived' ? 'No archived matches' :
+               selectedTab === 'friendly' ? 'No friendly matches' :
+               `No ${selectedTab} matches`}
             </Text>
           </View>
         )}
@@ -799,6 +863,9 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 8,
   },
+  tabScrollContainer: {
+    flexGrow: 0,
+  },
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -806,12 +873,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tab: {
-    flex: 1,
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     borderRadius: 8,
     backgroundColor: '#1E293B',
     alignItems: 'center',
+    minWidth: 100,
   },
   activeTab: {
     backgroundColor: '#0EA5E9',
