@@ -36,7 +36,7 @@ export default function StatsScreen() {
     
     console.log('📊 Recalculating league stats, completed matches:', completedMatchesCount, 'timestamp:', Date.now());
     
-    return activeGroup.competitions
+    const leagues = activeGroup.competitions
       .filter(comp => comp.type === 'league')
       .map(league => {
         const leagueMatches = league.matches.filter(m => m.status === 'completed');
@@ -112,6 +112,22 @@ export default function StatsScreen() {
           hasCompletedMatches,
         };
       });
+    
+    return leagues.sort((a, b) => {
+      const aOngoing = a.league.status === 'active';
+      const bOngoing = b.league.status === 'active';
+      
+      if (aOngoing && !bOngoing) return -1;
+      if (!aOngoing && bOngoing) return 1;
+      
+      if (!aOngoing && !bOngoing) {
+        const aCompletedAt = a.league.updatedAt || a.league.createdAt;
+        const bCompletedAt = b.league.updatedAt || b.league.createdAt;
+        return new Date(bCompletedAt).getTime() - new Date(aCompletedAt).getTime();
+      }
+      
+      return 0;
+    });
   }, [activeGroup, completedMatchesCount]);
 
   const sortedPlayers = useMemo(() => {
