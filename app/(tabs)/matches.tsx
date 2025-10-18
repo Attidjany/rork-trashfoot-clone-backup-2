@@ -144,7 +144,7 @@ export default function MatchesScreen() {
       return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime();
     }
     
-    return new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime();
+    return new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime();
   });
   
   const knockoutTournaments = activeGroup.competitions.filter(c => c.type === 'tournament' && c.tournamentType === 'knockout');
