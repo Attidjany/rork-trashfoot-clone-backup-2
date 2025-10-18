@@ -126,19 +126,23 @@ export default function SettingsScreen() {
         return;
       }
 
-      const { error: updateError } = await supabase
+      const { data: updatedPlayer, error: updateError } = await supabase
         .from('players')
         .update({
           name: editName.trim(),
           gamer_handle: editGamerHandle.trim(),
         })
-        .eq('id', player.id);
+        .eq('id', player.id)
+        .select()
+        .single();
 
-      if (updateError) {
+      if (updateError || !updatedPlayer) {
         console.error('❌ Profile update error:', updateError);
-        Alert.alert('Error', updateError.message || 'Failed to update profile');
+        Alert.alert('Error', updateError?.message || 'Failed to update profile');
         return;
       }
+      
+      console.log('✅ Profile updated successfully:', updatedPlayer);
 
       console.log('✅ Profile updated successfully, refetching groups...');
       await refetchGroups();

@@ -80,8 +80,8 @@ export default function MatchesScreen() {
     );
   }
 
-  const activeCompetitions = activeGroup.competitions.filter(c => c.status !== 'completed');
-  const completedCompetitions = activeGroup.competitions.filter(c => c.status === 'completed');
+  const activeCompetitions = activeGroup.competitions.filter(c => c.status !== 'completed' && c.type !== 'friendly');
+  const completedCompetitions = activeGroup.competitions.filter(c => c.status === 'completed' && c.type !== 'friendly');
   const friendlyCompetitions = activeGroup.competitions.filter(c => c.type === 'friendly');
   
   const allActiveMatches = activeCompetitions.flatMap(c => c.matches);
