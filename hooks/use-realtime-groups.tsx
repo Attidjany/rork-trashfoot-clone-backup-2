@@ -272,14 +272,18 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
           })
           .filter((m: any) => m !== null) as Player[];
 
-        const groupAdminIds = gm.groups.admin_ids || [];
+          const adminIds = members
+          .filter((m: any) => m.is_admin)
+          .map((m: any) => m.player_id);
+          // const groupAdminIds = gm.groups.admin_ids || [];
         
         return {
           id: gm.groups.id,
           name: gm.groups.name,
           description: gm.groups.description || '',
           adminId: gm.groups.admin_id,
-          adminIds: groupAdminIds.length > 0 ? groupAdminIds : [gm.groups.admin_ids],
+          adminIds: adminIds.length > 0 ? adminIds : [gm.groups.admin_id],
+          // adminIds: groupAdminIds.length > 0 ? groupAdminIds : [gm.groups.admin_id],
           members: membersList,
           createdAt: gm.groups.created_at,
           competitions: competitionsWithMatches,
