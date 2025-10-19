@@ -279,7 +279,7 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
           name: gm.groups.name,
           description: gm.groups.description || '',
           adminId: gm.groups.admin_id,
-          adminIds: groupAdminIds.length > 0 ? groupAdminIds : [gm.groups.admin_id],
+          adminIds: groupAdminIds.length > 0 ? groupAdminIds : [gm.groups.admin_ids],
           members: membersList,
           createdAt: gm.groups.created_at,
           competitions: competitionsWithMatches,
