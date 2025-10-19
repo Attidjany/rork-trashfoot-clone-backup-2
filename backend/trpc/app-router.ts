@@ -6,6 +6,7 @@ import { checkGamerHandleProcedure } from "./routes/auth/check-handle/route";
 import { saveUserDataProcedure } from "./routes/auth/save-data/route";
 import { updateProfileProcedure } from "./routes/auth/update-profile/route";
 import { getPublicGroupsProcedure, requestJoinGroupProcedure, manageGroupMemberProcedure, createGroupProcedure, joinGroupProcedure, getUserGroupsProcedure, getGroupDetailsProcedure } from "./routes/groups/management/route";
+import { promoteToAdminProcedure, demoteFromAdminProcedure, suspendPlayerProcedure, unsuspendPlayerProcedure } from "./routes/groups/management/owner-controls";
 import { createCompetitionProcedure, getGroupCompetitionsProcedure } from "./routes/competitions/management/route";
 import { updateMatchResultProcedure } from "./routes/matches/update-result/route";
 import { correctMatchScoreProcedure } from "./routes/matches/correct-score/route";
@@ -30,6 +31,10 @@ export const appRouter = createTRPCRouter({
     join: joinGroupProcedure,
     getUserGroups: getUserGroupsProcedure,
     getDetails: getGroupDetailsProcedure,
+    promoteToAdmin: promoteToAdminProcedure,
+    demoteFromAdmin: demoteFromAdminProcedure,
+    suspendPlayer: suspendPlayerProcedure,
+    unsuspendPlayer: unsuspendPlayerProcedure,
   }),
   admin: createTRPCRouter({
     getAllAccounts: getAllAccountsProcedure,

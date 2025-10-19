@@ -121,12 +121,12 @@ export default function StatsScreen() {
       if (!aOngoing && bOngoing) return 1;
       
       if (!aOngoing && !bOngoing) {
-        const aCompletedAt = a.league.updatedAt || a.league.createdAt;
-        const bCompletedAt = b.league.updatedAt || b.league.createdAt;
-        return new Date(bCompletedAt).getTime() - new Date(aCompletedAt).getTime();
+        const aDate = a.league.endDate || a.league.startDate;
+        const bDate = b.league.endDate || b.league.startDate;
+        return new Date(bDate).getTime() - new Date(aDate).getTime();
       }
       
-      return 0;
+      return new Date(b.league.startDate).getTime() - new Date(a.league.startDate).getTime();
     });
   }, [activeGroup, completedMatchesCount]);
 
@@ -450,7 +450,7 @@ export default function StatsScreen() {
         {selectedTab === 'leaderboard' && (
           <>
             {/* Top 3 Podium */}
-            {sortedPlayers.length >= 3 && (
+            {sortedPlayers.length >= 3 && sortedPlayers[0].stats.played > 0 && sortedPlayers[1].stats.played > 0 && sortedPlayers[2].stats.played > 0 && (
               <View style={styles.podiumContainer}>
                 <LinearGradient
                   colors={['#0EA5E9', '#8B5CF6']}
@@ -709,7 +709,7 @@ export default function StatsScreen() {
                     </LinearGradient>
                     
                     {/* Podium for top 3 */}
-                    {hasCompletedMatches && hasMatches && players.length >= 3 && (
+                    {hasCompletedMatches && hasMatches && players.length >= 3 && players[0].leagueStats.played > 0 && players[1].leagueStats.played > 0 && players[2].leagueStats.played > 0 && (
                       <View style={styles.miniPodiumContainer}>
                         <View style={styles.miniPodium}>
                           {/* Second Place */}

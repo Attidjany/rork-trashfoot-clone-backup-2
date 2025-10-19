@@ -81,6 +81,9 @@ export default function GroupDetailsScreen() {
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const matchCardRefs = useRef<{ [key: string]: any }>({});
+  const [memberActionModal, setMemberActionModal] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [suspensionDays, setSuspensionDays] = useState('7');
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
@@ -145,6 +148,7 @@ export default function GroupDetailsScreen() {
   }, [groupId, user, groups]);
 
   const isAdmin = group && playerId && (group.adminId === playerId || group.adminIds?.includes(playerId));
+  const isOwner = group && playerId && group.adminId === playerId;
 
   const handleDeleteMatch = async (matchId: string) => {
     try {
@@ -807,8 +811,14 @@ export default function GroupDetailsScreen() {
                       size="small"
                     />
                     {member.id === group.adminId && (
-                      <View style={styles.adminBadge}>
+                      <View style={styles.ownerBadge}>
                         <Crown size={12} color="#F59E0B" />
+                        <Text style={styles.ownerText}>Owner</Text>
+                      </View>
+                    )}
+                    {member.id !== group.adminId && group.adminIds?.includes(member.id) && (
+                      <View style={styles.adminBadge}>
+                        <Crown size={12} color="#3B82F6" />
                         <Text style={styles.adminText}>Admin</Text>
                       </View>
                     )}
@@ -1482,7 +1492,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     flex: 1,
   },
-  adminBadge: {
+  ownerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(245, 158, 11, 0.2)',
@@ -1491,10 +1501,24 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     gap: 4,
   },
-  adminText: {
+  ownerText: {
     fontSize: 10,
     fontWeight: '600' as const,
     color: '#F59E0B',
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 4,
+  },
+  adminText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#3B82F6',
   },
   memberStats: {
     fontSize: 12,

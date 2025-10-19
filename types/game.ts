@@ -10,6 +10,7 @@ export interface Player {
   role?: 'player' | 'admin' | 'super_admin';
   status?: 'active' | 'suspended' | 'banned';
   suspendedUntil?: string;
+  suspendedInGroups?: { [groupId: string]: { suspended: boolean; until?: string } };
 }
 
 export interface PlayerStats {
