@@ -28,7 +28,9 @@ import {
   UserPlus,
   X as XIcon,
   Check,
-  Camera
+  Camera,
+  ShieldOff,
+  UserCog
 } from 'lucide-react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Clipboard from 'expo-clipboard';
@@ -43,6 +45,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AchievementBadges } from '@/components/AchievementBadges';
 import { supabase } from '@/lib/supabase';
 import { Group } from '@/types/game';
+import { trpc } from '@/lib/trpc';
 
 export default function GroupDetailsScreen() {
   const router = useRouter();
@@ -84,6 +87,12 @@ export default function GroupDetailsScreen() {
   const [memberActionModal, setMemberActionModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [suspensionDays, setSuspensionDays] = useState('7');
+  const [actionLoading, setActionLoading] = useState(false);
+  
+  const promoteToAdminMutation = trpc.groups.promoteToAdmin.useMutation();
+  const demoteFromAdminMutation = trpc.groups.demoteFromAdmin.useMutation();
+  const suspendPlayerMutation = trpc.groups.suspendPlayer.useMutation();
+  const unsuspendPlayerMutation = trpc.groups.unsuspendPlayer.useMutation();
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
@@ -791,6 +800,87 @@ export default function GroupDetailsScreen() {
     </ScrollView>
   );
 
+  const handlePromoteToAdmin = async (memberId: string) => {
+    if (!groupId) return;
+    setActionLoading(true);
+    try {
+      await promoteToAdminMutation.mutateAsync({
+        groupId: groupId as string,
+        playerId: memberId,
+      });
+      Alert.alert('Success', 'Player promoted to admin');
+      setMemberActionModal(false);
+    } catch (error: any) {
+      console.error('Error promoting player:', error);
+      Alert.alert('Error', error.message || 'Failed to promote player');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDemoteFromAdmin = async (memberId: string) => {
+    if (!groupId) return;
+    setActionLoading(true);
+    try {
+      await demoteFromAdminMutation.mutateAsync({
+        groupId: groupId as string,
+        playerId: memberId,
+      });
+      Alert.alert('Success', 'Admin privileges revoked');
+      setMemberActionModal(false);
+    } catch (error: any) {
+      console.error('Error demoting player:', error);
+      Alert.alert('Error', error.message || 'Failed to demote player');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSuspendPlayer = async (memberId: string, days?: number) => {
+    if (!groupId) return;
+    setActionLoading(true);
+    try {
+      await suspendPlayerMutation.mutateAsync({
+        groupId: groupId as string,
+        playerId: memberId,
+        duration: days,
+      });
+      Alert.alert('Success', days ? `Player suspended for ${days} days` : 'Player suspended indefinitely');
+      setMemberActionModal(false);
+    } catch (error: any) {
+      console.error('Error suspending player:', error);
+      Alert.alert('Error', error.message || 'Failed to suspend player');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUnsuspendPlayer = async (memberId: string) => {
+    if (!groupId) return;
+    setActionLoading(true);
+    try {
+      await unsuspendPlayerMutation.mutateAsync({
+        groupId: groupId as string,
+        playerId: memberId,
+      });
+      Alert.alert('Success', 'Player suspension lifted');
+      setMemberActionModal(false);
+    } catch (error: any) {
+      console.error('Error unsuspending player:', error);
+      Alert.alert('Error', error.message || 'Failed to unsuspend player');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const isSuspended = (member: any) => {
+    if (!member.suspendedInGroups || !groupId) return false;
+    const suspension = member.suspendedInGroups[groupId];
+    if (!suspension) return false;
+    if (!suspension.until) return true;
+    return new Date(suspension.until) > new Date();
+  };
+
   const renderMembers = () => (
     <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
@@ -822,6 +912,12 @@ export default function GroupDetailsScreen() {
                         <Text style={styles.adminText}>Admin</Text>
                       </View>
                     )}
+                    {isSuspended(member) && (
+                      <View style={styles.suspendedBadge}>
+                        <ShieldOff size={12} color="#EF4444" />
+                        <Text style={styles.suspendedText}>Suspended</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
                 <Text style={styles.memberStats}>
@@ -832,7 +928,20 @@ export default function GroupDetailsScreen() {
                 </Text>
               </View>
             </View>
-            <Text style={styles.winRate}>{Math.round(member.stats.winRate)}%</Text>
+            <View style={styles.memberRight}>
+              <Text style={styles.winRate}>{Math.round(member.stats.winRate)}%</Text>
+              {isOwner && member.id !== group.adminId && (
+                <TouchableOpacity
+                  style={styles.manageButton}
+                  onPress={() => {
+                    setSelectedMember(member);
+                    setMemberActionModal(true);
+                  }}
+                >
+                  <Settings size={18} color="#64748B" />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         ))}
       </View>
@@ -1216,6 +1325,210 @@ export default function GroupDetailsScreen() {
                 <Text style={styles.submitButtonText}>Update</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Member Actions Modal */}
+      <Modal
+        visible={memberActionModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMemberActionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Manage Member</Text>
+            
+            {selectedMember && (
+              <View style={styles.memberActionContainer}>
+                <View style={styles.memberActionHeader}>
+                  <View style={styles.memberAvatar}>
+                    <User size={32} color="#fff" />
+                  </View>
+                  <View style={styles.memberActionInfo}>
+                    <Text style={styles.memberActionName}>{selectedMember.name}</Text>
+                    <View style={styles.memberActionBadges}>
+                      {group.adminIds?.includes(selectedMember.id) && (
+                        <View style={styles.adminBadge}>
+                          <Crown size={12} color="#3B82F6" />
+                          <Text style={styles.adminText}>Admin</Text>
+                        </View>
+                      )}
+                      {isSuspended(selectedMember) && (
+                        <View style={styles.suspendedBadge}>
+                          <ShieldOff size={12} color="#EF4444" />
+                          <Text style={styles.suspendedText}>Suspended</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.actionsList}>
+                  {!group.adminIds?.includes(selectedMember.id) ? (
+                    <TouchableOpacity
+                      style={styles.actionItem}
+                      onPress={() => {
+                        if (Platform.OS === 'web') {
+                          if (window.confirm(`Promote ${selectedMember.name} to admin?`)) {
+                            handlePromoteToAdmin(selectedMember.id);
+                          }
+                        } else {
+                          Alert.alert(
+                            'Promote to Admin',
+                            `Promote ${selectedMember.name} to admin?`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Promote',
+                                onPress: () => handlePromoteToAdmin(selectedMember.id),
+                              },
+                            ]
+                          );
+                        }
+                      }}
+                      disabled={actionLoading}
+                    >
+                      <View style={styles.actionIconContainer}>
+                        <UserCog size={20} color="#10B981" />
+                      </View>
+                      <View style={styles.actionTextContainer}>
+                        <Text style={styles.actionItemTitle}>Promote to Admin</Text>
+                        <Text style={styles.actionItemSubtitle}>Grant admin privileges</Text>
+                      </View>
+                      <ChevronRight size={20} color="#64748B" />
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.actionItem}
+                      onPress={() => {
+                        if (Platform.OS === 'web') {
+                          if (window.confirm(`Remove admin privileges from ${selectedMember.name}?`)) {
+                            handleDemoteFromAdmin(selectedMember.id);
+                          }
+                        } else {
+                          Alert.alert(
+                            'Demote Admin',
+                            `Remove admin privileges from ${selectedMember.name}?`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Demote',
+                                style: 'destructive',
+                                onPress: () => handleDemoteFromAdmin(selectedMember.id),
+                              },
+                            ]
+                          );
+                        }
+                      }}
+                      disabled={actionLoading}
+                    >
+                      <View style={styles.actionIconContainer}>
+                        <UserCog size={20} color="#F59E0B" />
+                      </View>
+                      <View style={styles.actionTextContainer}>
+                        <Text style={styles.actionItemTitle}>Demote from Admin</Text>
+                        <Text style={styles.actionItemSubtitle}>Remove admin privileges</Text>
+                      </View>
+                      <ChevronRight size={20} color="#64748B" />
+                    </TouchableOpacity>
+                  )}
+
+                  {!isSuspended(selectedMember) ? (
+                    <View>
+                      <TouchableOpacity
+                        style={styles.actionItem}
+                        onPress={() => {
+                          if (Platform.OS === 'web') {
+                            const days = prompt(`Suspend ${selectedMember.name} for how many days? (Leave empty for indefinite)`);
+                            if (days !== null) {
+                              handleSuspendPlayer(selectedMember.id, days ? parseInt(days) : undefined);
+                            }
+                          } else {
+                            Alert.prompt(
+                              'Suspend Player',
+                              `Suspend ${selectedMember.name} for how many days? (Leave empty for indefinite)`,
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Suspend',
+                                  onPress: (text) => {
+                                    handleSuspendPlayer(selectedMember.id, text ? parseInt(text) : undefined);
+                                  },
+                                },
+                              ],
+                              'plain-text',
+                              suspensionDays
+                            );
+                          }
+                        }}
+                        disabled={actionLoading}
+                      >
+                        <View style={styles.actionIconContainer}>
+                          <ShieldOff size={20} color="#EF4444" />
+                        </View>
+                        <View style={styles.actionTextContainer}>
+                          <Text style={styles.actionItemTitle}>Suspend Player</Text>
+                          <Text style={styles.actionItemSubtitle}>Temporarily restrict access</Text>
+                        </View>
+                        <ChevronRight size={20} color="#64748B" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.actionItem}
+                      onPress={() => {
+                        if (Platform.OS === 'web') {
+                          if (window.confirm(`Lift suspension for ${selectedMember.name}?`)) {
+                            handleUnsuspendPlayer(selectedMember.id);
+                          }
+                        } else {
+                          Alert.alert(
+                            'Unsuspend Player',
+                            `Lift suspension for ${selectedMember.name}?`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Unsuspend',
+                                onPress: () => handleUnsuspendPlayer(selectedMember.id),
+                              },
+                            ]
+                          );
+                        }
+                      }}
+                      disabled={actionLoading}
+                    >
+                      <View style={styles.actionIconContainer}>
+                        <Check size={20} color="#10B981" />
+                      </View>
+                      <View style={styles.actionTextContainer}>
+                        <Text style={styles.actionItemTitle}>Lift Suspension</Text>
+                        <Text style={styles.actionItemSubtitle}>Restore full access</Text>
+                      </View>
+                      <ChevronRight size={20} color="#64748B" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {actionLoading && (
+                  <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#0EA5E9" />
+                  </View>
+                )}
+              </View>
+            )}
+            
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setMemberActionModal(false);
+                setSelectedMember(null);
+              }}
+              disabled={actionLoading}
+            >
+              <Text style={styles.cancelButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1787,5 +2100,100 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     flex: 1,
+  },
+  memberRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  manageButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(100, 116, 139, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  suspendedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 4,
+  },
+  suspendedText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#EF4444',
+  },
+  memberActionContainer: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  memberActionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  memberActionInfo: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  memberActionName: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: '#fff',
+    marginBottom: 8,
+  },
+  memberActionBadges: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionsList: {
+    gap: 8,
+  },
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  actionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1E293B',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionTextContainer: {
+    flex: 1,
+  },
+  actionItemTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#fff',
+    marginBottom: 2,
+  },
+  actionItemSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
   },
 });
