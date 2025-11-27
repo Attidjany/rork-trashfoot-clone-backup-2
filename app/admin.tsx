@@ -225,7 +225,7 @@ const ActivityItem = ({ activity }: { activity: AdminData['recentActivity'][0] }
 export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [refreshing, setRefreshing] = useState(false);
+  const [, setRefreshing] = useState(false);
   
   const adminData = useMemo<AdminData>(() => ({
     allGroups: [],
@@ -399,7 +399,7 @@ export default function AdminScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteAccountMutation.mutateAsync({ email: userEmail });
+              await deleteAccountMutation.mutateAsync({ playerId: userEmail });
               Alert.alert('Success', 'Account deleted successfully');
               await onRefresh();
             } catch (error) {
@@ -440,13 +440,7 @@ export default function AdminScreen() {
       );
     }
     
-    const allAccounts = [...(accounts?.dummyAccounts || []), ...(accounts?.realAccounts || [])];
-    const filteredAccounts = searchQuery 
-      ? allAccounts.filter(account => 
-          account.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          account.email?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : allAccounts;
+
     
     const handleBulkDeleteDummy = () => {
       Alert.alert(
@@ -459,10 +453,9 @@ export default function AdminScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                const dummyEmails = accounts?.dummyAccounts.map((acc: Player) => acc.email).filter(Boolean) as string[] || [];
+                const dummyIds = accounts?.accounts.map((acc: any) => acc.id).filter(Boolean) as string[] || [];
                 await bulkDeleteMutation.mutateAsync({ 
-                  emails: dummyEmails, 
-                  accountType: 'dummy' 
+                  playerIds: dummyIds
                 });
                 Alert.alert('Success', 'All dummy accounts deleted successfully');
                 await onRefresh();
@@ -488,14 +481,14 @@ export default function AdminScreen() {
             icon={Database}
             title="Total Accounts"
             value={stats?.totalAccounts || 0}
-            subtitle={`${stats?.dummyAccounts || 0} dummy, ${stats?.realAccounts || 0} real`}
+            subtitle={`All accounts`}
             color="#3B82F6"
           />
           <StatCard
             icon={Users}
-            title="Real Accounts"
-            value={stats?.realAccounts || 0}
-            subtitle={`${stats?.realPercentage || 0}% of total`}
+            title="All Accounts"
+            value={stats?.totalAccounts || 0}
+            subtitle="Total registered users"
             color="#10B981"
           />
         </View>
@@ -505,10 +498,10 @@ export default function AdminScreen() {
           <TouchableOpacity 
             style={[styles.bulkActionButton, styles.deleteButton]} 
             onPress={handleBulkDeleteDummy}
-            disabled={!accounts?.dummyAccounts.length}
+            disabled={!accounts?.accounts.length}
           >
             <Trash2 size={16} color="#fff" />
-            <Text style={styles.bulkActionText}>Delete All Dummy ({accounts?.dummyAccounts.length || 0})</Text>
+            <Text style={styles.bulkActionText}>Delete All Accounts ({accounts?.accounts.length || 0})</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.bulkActionButton, styles.refreshButton]} onPress={onRefresh}>
             <RefreshCw size={16} color="#3B82F6" />
@@ -528,72 +521,31 @@ export default function AdminScreen() {
           />
         </View>
         
-        {/* Dummy Accounts Section */}
-        <Text style={styles.sectionTitle}>Dummy Accounts ({accounts?.dummyAccounts.length || 0})</Text>
-        {accounts?.dummyAccounts.map((user: Player) => (
-          <View key={`dummy-${user.id}`} style={[styles.card, styles.dummyAccountCard]}>
+        {/* All Accounts Section */}
+        <Text style={styles.sectionTitle}>All Accounts ({accounts?.accounts.length || 0})</Text>
+        {accounts?.accounts.map((user: any) => (
+          <View key={`account-${user.id}`} style={[styles.card, styles.dummyAccountCard]}>
             <View style={styles.cardHeader}>
               <View>
                 <Text style={styles.cardTitle}>{user.name}</Text>
                 <Text style={styles.cardSubtitle}>{user.email}</Text>
                 <View style={styles.accountTypeBadge}>
-                  <Text style={styles.accountTypeText}>DUMMY ACCOUNT</Text>
+                  <Text style={styles.accountTypeText}>USER ACCOUNT</Text>
                 </View>
               </View>
               <TouchableOpacity 
                 style={[styles.adminButton, styles.deleteButton]}
-                onPress={() => handleDeleteUser(user.email || '', user.name)}
+                onPress={() => handleDeleteUser(user.id || '', user.name)}
               >
                 <Trash2 size={14} color="#fff" />
                 <Text style={styles.adminButtonText}>Remove</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.cardStats}>
-              <Text style={styles.cardStatText}>Wins: {user.stats.wins}</Text>
-              <Text style={styles.cardStatText}>Played: {user.stats.played}</Text>
-              <Text style={styles.cardStatText}>Win Rate: {user.stats.winRate.toFixed(1)}%</Text>
-            </View>
+            <Text style={styles.cardDate}>
+              Joined {new Date(user.joinedAt).toLocaleDateString()}
+            </Text>
           </View>
         ))}
-        
-        {/* Real Accounts Section */}
-        <Text style={styles.sectionTitle}>Real Accounts ({accounts?.realAccounts.length || 0})</Text>
-        {accounts?.realAccounts.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Users size={48} color="#9CA3AF" />
-            <Text style={styles.emptyStateText}>No real accounts yet</Text>
-            <Text style={styles.emptyStateSubtext}>Real accounts will appear here when users register</Text>
-          </View>
-        ) : (
-          accounts?.realAccounts.map((user: Player) => (
-            <View key={`real-${user.id}`} style={[styles.card, styles.realAccountCard]}>
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.cardTitle}>{user.name}</Text>
-                  <Text style={styles.cardSubtitle}>{user.email}</Text>
-                  <View style={[styles.accountTypeBadge, styles.realAccountBadge]}>
-                    <Text style={[styles.accountTypeText, styles.realAccountText]}>REAL ACCOUNT</Text>
-                  </View>
-                </View>
-                <TouchableOpacity 
-                  style={[styles.adminButton, styles.deleteButton]}
-                  onPress={() => handleDeleteUser(user.email || '', user.name)}
-                >
-                  <Trash2 size={14} color="#fff" />
-                  <Text style={styles.adminButtonText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.cardStats}>
-                <Text style={styles.cardStatText}>Wins: {user.stats.wins}</Text>
-                <Text style={styles.cardStatText}>Played: {user.stats.played}</Text>
-                <Text style={styles.cardStatText}>Win Rate: {user.stats.winRate.toFixed(1)}%</Text>
-              </View>
-              <Text style={styles.cardDate}>
-                Joined {new Date(user.joinedAt).toLocaleDateString()}
-              </Text>
-            </View>
-          ))
-        )}
       </ScrollView>
     );
   };

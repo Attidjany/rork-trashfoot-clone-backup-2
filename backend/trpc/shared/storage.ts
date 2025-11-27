@@ -2,7 +2,6 @@
 // Shared storage to ensure data consistency across routes
 
 import { Player, Group, Competition, Match, ChatMessage } from '@/types/game';
-import { createDummyData, createAdminDummyData } from '@/mocks/dummy-data';
 
 // Storage for user data
 export const userDataStorage = new Map<string, any>();
@@ -21,26 +20,7 @@ export const realMessagesStorage = new Map<string, ChatMessage[]>();
 // Track which accounts are dummy vs real
 export const accountTypeStorage = new Map<string, 'dummy' | 'real'>();
 
-// Initialize dummy data and mark as dummy accounts
-function initializeDummyData() {
-  const dummyData = createDummyData();
-  const adminData = createAdminDummyData();
-  
-  // Mark all dummy accounts
-  const allDummyUsers = [...adminData.allUsers];
-  allDummyUsers.forEach(user => {
-    if (user.email?.trim()) {
-      accountTypeStorage.set(user.email, 'dummy');
-    }
-  });
-  
-  console.log('Initialized dummy data with', allDummyUsers.length, 'dummy accounts');
-  
-  return { dummyData, adminData };
-}
 
-// Initialize on startup
-initializeDummyData();
 
 // Helper functions
 export function isDummyAccount(email: string): boolean {
@@ -54,8 +34,7 @@ export function isRealAccount(email: string): boolean {
 }
 
 export function getAllDummyAccounts(): Player[] {
-  const adminData = createAdminDummyData();
-  return adminData.allUsers;
+  return [];
 }
 
 export function getAllRealAccounts(): Player[] {
@@ -102,14 +81,10 @@ export function deleteAccount(email: string): boolean {
   return false;
 }
 
-export function getDummyDataForUser(email: string) {
-  if (!email?.trim()) {
-    throw new Error('Invalid email for dummy data retrieval');
-  }
-  // Always return fresh dummy data to ensure consistency
-  return createDummyData();
+export function getDummyDataForUser(_email: string) {
+  return null;
 }
 
 export function getAdminDummyData() {
-  return createAdminDummyData();
+  return null;
 }

@@ -63,7 +63,6 @@ export default function CompleteProfileScreen() {
       }
 
       const result = await updateProfileMutation.mutateAsync({
-        userId: params.playerId,
         name: name.trim(),
         gamerHandle: gamerHandle.trim(),
       });

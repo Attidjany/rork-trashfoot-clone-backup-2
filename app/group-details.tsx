@@ -1453,7 +1453,7 @@ export default function GroupDetailsScreen() {
                                 { text: 'Cancel', style: 'cancel' },
                                 {
                                   text: 'Suspend',
-                                  onPress: (text) => {
+                                  onPress: (text?: string) => {
                                     handleSuspendPlayer(selectedMember.id, text ? parseInt(text) : undefined);
                                   },
                                 },
