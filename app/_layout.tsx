@@ -48,6 +48,13 @@ function RootLayoutNav() {
       />
       <Stack.Screen name="group-details" options={{ presentation: "modal" }} />
       <Stack.Screen name="group-browser" options={{ presentation: "modal" }} />
+      <Stack.Screen 
+        name="reset-password" 
+        options={{ 
+          headerShown: true,
+          title: "Reset Password"
+        }} 
+      />
     </Stack>
   );
 }

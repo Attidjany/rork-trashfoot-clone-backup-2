@@ -27,7 +27,8 @@ import {
   Edit2,
   CheckCircle,
   XCircle,
-  Loader
+  Loader,
+  Key
 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -194,6 +195,51 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!user?.email) {
+      Alert.alert('Error', 'No email address found');
+      return;
+    }
+
+    const performReset = async () => {
+      try {
+        console.log('Sending password reset email to:', user.email);
+        const { error } = await supabase.auth.resetPasswordForEmail(user.email!, {
+          redirectTo: 'https://trashfoot.vercel.app/reset-password',
+        });
+
+        if (error) {
+          console.error('Error sending reset email:', error);
+          Alert.alert('Error', error.message);
+          return;
+        }
+
+        Alert.alert(
+          'Check Your Email',
+          `A password reset link has been sent to ${user.email}. Please check your inbox.`
+        );
+      } catch (error: any) {
+        console.error('Error in password reset:', error);
+        Alert.alert('Error', error?.message || 'Failed to send reset email');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Send password reset email to ${user.email}?`)) {
+        performReset();
+      }
+    } else {
+      Alert.alert(
+        'Reset Password',
+        `Send password reset email to ${user.email}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Send Email', onPress: performReset }
+        ]
+      );
+    }
+  };
+
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
@@ -348,6 +394,12 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Privacy & Security</Text>
           <View style={styles.settingsGroup}>
+            <SettingItem
+              icon={Key}
+              title="Reset Password"
+              subtitle="Send password reset email"
+              onPress={handleResetPassword}
+            />
             <SettingItem
               icon={Shield}
               title="Privacy Policy"
