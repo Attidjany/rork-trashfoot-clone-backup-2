@@ -28,7 +28,8 @@ import {
   CheckCircle,
   XCircle,
   Loader,
-  Key
+  Key,
+  Mail
 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,6 +50,9 @@ export default function SettingsScreen() {
   const [handleSuggestions, setHandleSuggestions] = useState<string[]>([]);
   const [checkingHandle, setCheckingHandle] = useState(false);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [changeEmailModal, setChangeEmailModal] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
   
   const { user } = useSession();
   const { groups, isLoading: groupsLoading, refetch: refetchGroups } = useRealtimeGroups();
@@ -240,6 +244,52 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleChangeEmail = async () => {
+    if (!newEmail.trim()) {
+      Alert.alert('Error', 'Please enter a new email address');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail.trim())) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    if (newEmail.trim().toLowerCase() === user?.email?.toLowerCase()) {
+      Alert.alert('Error', 'This is already your current email address');
+      return;
+    }
+
+    setIsChangingEmail(true);
+    try {
+      console.log('Updating email to:', newEmail);
+      const { error } = await supabase.auth.updateUser({
+        email: newEmail.trim(),
+      });
+
+      if (error) {
+        console.error('Error updating email:', error);
+        Alert.alert('Error', error.message);
+        return;
+      }
+
+      console.log('Email update initiated successfully');
+      setChangeEmailModal(false);
+      setNewEmail('');
+      
+      Alert.alert(
+        'Verify Your Email',
+        `A confirmation email has been sent to ${newEmail.trim()}. Please check your inbox and click the link to confirm your new email address.`
+      );
+    } catch (error: any) {
+      console.error('Error in email change:', error);
+      Alert.alert('Error', error?.message || 'Failed to update email');
+    } finally {
+      setIsChangingEmail(false);
+    }
+  };
+
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
@@ -404,6 +454,12 @@ export default function SettingsScreen() {
               onPress={handleResetPassword}
             />
             <SettingItem
+              icon={Mail}
+              title="Change Email"
+              subtitle="Update your email address"
+              onPress={() => setChangeEmailModal(true)}
+            />
+            <SettingItem
               icon={Shield}
               title="Privacy Policy"
               onPress={() => Alert.alert('Privacy Policy', 'Privacy policy content would be displayed here.')}
@@ -537,6 +593,64 @@ export default function SettingsScreen() {
               >
                 <Text style={styles.submitButtonText}>
                   {isUpdatingProfile ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Change Email Modal */}
+      <Modal
+        visible={changeEmailModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setChangeEmailModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <Mail size={32} color="#0EA5E9" />
+            </View>
+            <Text style={styles.modalTitle}>Change Email</Text>
+            <Text style={styles.modalSubtitle}>
+              Current email: {user?.email}
+            </Text>
+
+            <TextInput
+              style={styles.input}
+              value={newEmail}
+              onChangeText={setNewEmail}
+              placeholder="New email address"
+              placeholderTextColor="#64748B"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+            />
+
+            <Text style={styles.modalNote}>
+              You will receive a confirmation email at your new address. You must click the link to complete the change.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setChangeEmailModal(false);
+                  setNewEmail('');
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handleChangeEmail}
+                disabled={isChangingEmail}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.submitButtonText}>
+                  {isChangingEmail ? 'Sending...' : 'Send Confirmation'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -751,5 +865,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600' as const,
+  },
+  modalIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(14, 165, 233, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  modalNote: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 18,
+    paddingHorizontal: 8,
   },
 });
