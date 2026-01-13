@@ -49,15 +49,15 @@ export const deleteMatchProcedure = protectedProcedure
 
       const { error: deleteError } = await supabase
         .from("matches")
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq("id", input.matchId);
 
       if (deleteError) {
-        console.error("❌ Error deleting match:", deleteError);
+        console.error("❌ Error soft deleting match:", deleteError);
         throw new Error("Failed to delete match");
       }
 
-      console.log("✅ Match deleted successfully");
+      console.log("✅ Match soft deleted successfully");
 
       return {
         success: true,

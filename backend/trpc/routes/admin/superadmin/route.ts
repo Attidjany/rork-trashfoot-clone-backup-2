@@ -28,7 +28,7 @@ export const getAllGroupsProcedure = publicProcedure
             name,
             type,
             status,
-            matches(id, status)
+            matches!inner(id, status)
           )
         `)
         .order('created_at', { ascending: false });
@@ -127,14 +127,14 @@ export const deleteMatchProcedure = publicProcedure
       
       const { error } = await supabaseAdmin
         .from('matches')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', input.matchId);
       
       if (error) {
-        throw new Error('Failed to delete match');
+        throw new Error('Failed to soft delete match');
       }
       
-      console.log('Successfully deleted match');
+      console.log('Successfully soft deleted match');
       
       return {
         success: true,
@@ -390,6 +390,7 @@ export const getAllMatchesProcedure = publicProcedure
             group:groups(id, name)
           )
         `)
+        .is('deleted_at', null)
         .order('scheduled_time', { ascending: false });
       
       if (error) {
@@ -417,7 +418,7 @@ export const getAllCompetitionsProcedure = publicProcedure
         .select(`
           *,
           group:groups(id, name),
-          matches(id, status),
+          matches!inner(id, status),
           participants:competition_participants(
             id,
             player:players(id, name, gamer_handle)
@@ -490,10 +491,10 @@ export const getPlatformStatsProcedure = publicProcedure
         supabaseAdmin.from('players').select('*', { count: 'exact', head: true }),
         supabaseAdmin.from('groups').select('*', { count: 'exact', head: true }),
         supabaseAdmin.from('competitions').select('*', { count: 'exact', head: true }),
-        supabaseAdmin.from('matches').select('*', { count: 'exact', head: true }),
+        supabaseAdmin.from('matches').select('*', { count: 'exact', head: true }).is('deleted_at', null),
         supabaseAdmin.from('groups').select('*', { count: 'exact', head: true }).eq('is_public', true),
-        supabaseAdmin.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'live'),
-        supabaseAdmin.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
+        supabaseAdmin.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'live').is('deleted_at', null),
+        supabaseAdmin.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'completed').is('deleted_at', null),
       ]);
       
       return {

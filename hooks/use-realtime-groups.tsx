@@ -150,7 +150,8 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
         supabase
           .from('matches')
           .select('*')
-          .in('competition_id', competitionIds),
+          .in('competition_id', competitionIds)
+          .is('deleted_at', null),
         
         supabase
           .from('competition_participants')
