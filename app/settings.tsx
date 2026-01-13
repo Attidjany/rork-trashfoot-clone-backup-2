@@ -284,6 +284,7 @@ export default function SettingsScreen() {
       style={styles.settingItem} 
       onPress={onPress}
       disabled={!onPress}
+      activeOpacity={0.7}
     >
       <View style={styles.settingLeft}>
         <Icon size={24} color={color} />
@@ -316,6 +317,7 @@ export default function SettingsScreen() {
           <TouchableOpacity 
             style={styles.primaryButton}
             onPress={() => router.replace('/auth')}
+            activeOpacity={0.7}
           >
             <Text style={styles.primaryButtonText}>Login</Text>
           </TouchableOpacity>
@@ -337,6 +339,7 @@ export default function SettingsScreen() {
           <TouchableOpacity 
             style={styles.profileCard}
             onPress={() => setEditProfileModal(true)}
+            activeOpacity={0.7}
           >
             <View style={styles.avatarContainer}>
               <User size={32} color="#fff" />
@@ -505,6 +508,7 @@ export default function SettingsScreen() {
                       key={index}
                       style={styles.suggestionChip}
                       onPress={() => setEditGamerHandle(suggestion)}
+                      activeOpacity={0.7}
                     >
                       <Text style={styles.suggestionText}>{suggestion}</Text>
                     </TouchableOpacity>
@@ -521,6 +525,7 @@ export default function SettingsScreen() {
                   setEditName('');
                   setEditGamerHandle('');
                 }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -528,6 +533,7 @@ export default function SettingsScreen() {
                 style={styles.submitButton}
                 onPress={handleUpdateProfile}
                 disabled={isUpdatingProfile}
+                activeOpacity={0.7}
               >
                 <Text style={styles.submitButtonText}>
                   {isUpdatingProfile ? 'Saving...' : 'Save'}
