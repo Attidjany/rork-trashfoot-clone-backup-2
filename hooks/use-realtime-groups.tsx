@@ -146,34 +146,53 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
 
       const competitionIds = (allCompetitionsData.data || []).map((c: any) => c.id);
 
-      const [allMatchesData, allParticipantsData] = competitionIds.length > 0 ? await Promise.all([
-        supabase
-          .from('matches')
-          .select('*')
-          .in('competition_id', competitionIds)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-          .limit(100000),
-        
-        supabase
+      let allMatchesData: any[] = [];
+      let allParticipantsData: any = { data: [] };
+
+      if (competitionIds.length > 0) {
+        let offset = 0;
+        const batchSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data: batchData, error: batchError } = await supabase
+            .from('matches')
+            .select('*')
+            .in('competition_id', competitionIds)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + batchSize - 1);
+
+          if (batchError) {
+            console.error('❌ ERROR fetching matches batch:', batchError);
+            break;
+          }
+
+          if (batchData && batchData.length > 0) {
+            allMatchesData = [...allMatchesData, ...batchData];
+            offset += batchSize;
+            hasMore = batchData.length === batchSize;
+            console.log(`📦 Fetched batch: ${batchData.length} matches (total: ${allMatchesData.length})`);
+          } else {
+            hasMore = false;
+          }
+        }
+
+        const participantsResult = await supabase
           .from('competition_participants')
           .select('competition_id, player_id')
-          .in('competition_id', competitionIds),
-      ]) : [{ data: [] }, { data: [] }];
-
-      console.log('🔍 DIAGNOSTIC: Fetched matches data:', {
-        totalMatches: allMatchesData.data?.length || 0,
-        competitionIdsCount: competitionIds.length,
-        hasError: !!allMatchesData.error,
-        error: allMatchesData.error,
-      });
-
-      if (allMatchesData.error) {
-        console.error('❌ ERROR fetching matches:', allMatchesData.error);
+          .in('competition_id', competitionIds);
+        
+        allParticipantsData = participantsResult;
       }
 
+      console.log('🔍 DIAGNOSTIC: Fetched matches data:', {
+        totalMatches: allMatchesData.length,
+        competitionIdsCount: competitionIds.length,
+      });
+
       const matchCountByCompetition = new Map<string, number>();
-      (allMatchesData.data || []).forEach((m: any) => {
+      allMatchesData.forEach((m: any) => {
         const count = matchCountByCompetition.get(m.competition_id) || 0;
         matchCountByCompetition.set(m.competition_id, count + 1);
       });
@@ -205,7 +224,7 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
       });
 
       const matchesByCompetition = new Map<string, any[]>();
-      (allMatchesData.data || []).forEach((m: any) => {
+      allMatchesData.forEach((m: any) => {
         if (!matchesByCompetition.has(m.competition_id)) {
           matchesByCompetition.set(m.competition_id, []);
         }
@@ -316,7 +335,7 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
       });
 
       const endTime = Date.now();
-      console.log(`✅ Groups data fetched in ${endTime - startTime}ms (${groupsData.length} groups, ${competitionIds.length} competitions, ${allMatchesData.data?.length || 0} matches)`);
+      console.log(`✅ Groups data fetched in ${endTime - startTime}ms (${groupsData.length} groups, ${competitionIds.length} competitions, ${allMatchesData.length} matches)`);
       setGroups(groupsData);
       setIsLoading(false);
     } catch (err: any) {
