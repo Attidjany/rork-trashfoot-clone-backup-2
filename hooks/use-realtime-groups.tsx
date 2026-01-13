@@ -151,13 +151,36 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
           .from('matches')
           .select('*')
           .in('competition_id', competitionIds)
-          .is('deleted_at', null),
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false }),
         
         supabase
           .from('competition_participants')
           .select('competition_id, player_id')
           .in('competition_id', competitionIds),
       ]) : [{ data: [] }, { data: [] }];
+
+      console.log('🔍 DIAGNOSTIC: Fetched matches data:', {
+        totalMatches: allMatchesData.data?.length || 0,
+        competitionIdsCount: competitionIds.length,
+        hasError: !!allMatchesData.error,
+        error: allMatchesData.error,
+      });
+
+      if (allMatchesData.error) {
+        console.error('❌ ERROR fetching matches:', allMatchesData.error);
+      }
+
+      const matchCountByCompetition = new Map<string, number>();
+      (allMatchesData.data || []).forEach((m: any) => {
+        const count = matchCountByCompetition.get(m.competition_id) || 0;
+        matchCountByCompetition.set(m.competition_id, count + 1);
+      });
+
+      console.log('🔍 DIAGNOSTIC: Matches per competition:', Array.from(matchCountByCompetition.entries()).map(([compId, count]) => ({
+        competitionId: compId.substring(0, 8) + '...',
+        matchCount: count,
+      })));
 
       const playersMap = new Map<string, any>();
       (allPlayersData.data || []).forEach((p: any) => {

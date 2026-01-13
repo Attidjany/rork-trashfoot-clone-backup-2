@@ -24,17 +24,34 @@ export default function StatsScreen() {
 
   const allMatches = useMemo(() => {
     if (!activeGroup) return [];
-    return activeGroup.competitions.flatMap(c => c.matches);
-  }, [activeGroup?.id, activeGroup?.competitions]);
+    const matches = activeGroup.competitions.flatMap(c => c.matches);
+    console.log('🔍 STATS DIAGNOSTIC: All matches', {
+      totalMatches: matches.length,
+      totalCompetitions: activeGroup.competitions.length,
+      matchesPerCompetition: activeGroup.competitions.map(c => ({
+        name: c.name.substring(0, 20),
+        matchCount: c.matches.length,
+        type: c.type,
+      })),
+    });
+    return matches;
+  }, [activeGroup]);
 
   const completedMatchesCount = useMemo(() => {
-    return allMatches.filter(m => m.status === 'completed').length;
+    const completed = allMatches.filter(m => m.status === 'completed').length;
+    console.log('🔍 STATS DIAGNOSTIC: Completed matches count:', completed, '/ Total:', allMatches.length);
+    return completed;
   }, [allMatches]);
 
   const leagueStats = useMemo(() => {
     if (!activeGroup) return [];
     
-    console.log('📊 Recalculating league stats, completed matches:', completedMatchesCount, 'timestamp:', Date.now());
+    console.log('📊 LEAGUE STATS DIAGNOSTIC - START:', {
+      completedMatchesCount,
+      totalCompetitions: activeGroup.competitions.length,
+      leagueCompetitions: activeGroup.competitions.filter(c => c.type === 'league').length,
+      timestamp: Date.now(),
+    });
     
     const leagues = activeGroup.competitions
       .filter(comp => comp.type === 'league')
@@ -113,7 +130,7 @@ export default function StatsScreen() {
         };
       });
     
-    return leagues.sort((a, b) => {
+    const sortedLeagues = leagues.sort((a, b) => {
       const aOngoing = a.league.status === 'active';
       const bOngoing = b.league.status === 'active';
       
@@ -128,28 +145,56 @@ export default function StatsScreen() {
       
       return new Date(b.league.startDate).getTime() - new Date(a.league.startDate).getTime();
     });
+
+    console.log('📊 LEAGUE STATS DIAGNOSTIC - END:', {
+      totalLeagues: sortedLeagues.length,
+      leaguesWithData: sortedLeagues.map(l => ({
+        name: l.league.name.substring(0, 20),
+        participants: l.totalParticipants,
+        playersWithStats: l.players.length,
+        hasCompletedMatches: l.hasCompletedMatches,
+      })),
+    });
+
+    return sortedLeagues;
   }, [activeGroup, completedMatchesCount]);
 
   const sortedPlayers = useMemo(() => {
     if (!activeGroup) return [];
-    return [...activeGroup.members]
-      .filter(player => player.stats.played > 0)
-      .sort((a, b) => {
-        if (b.stats.points !== a.stats.points) {
-          return b.stats.points - a.stats.points;
-        }
-        const aGD = a.stats.goalsFor - a.stats.goalsAgainst;
-        const bGD = b.stats.goalsFor - b.stats.goalsAgainst;
-        return bGD - aGD;
-      });
-  }, [activeGroup, completedMatchesCount]);
+    const filteredPlayers = [...activeGroup.members].filter(player => player.stats.played > 0);
+    const sorted = filteredPlayers.sort((a, b) => {
+      if (b.stats.points !== a.stats.points) {
+        return b.stats.points - a.stats.points;
+      }
+      const aGD = a.stats.goalsFor - a.stats.goalsAgainst;
+      const bGD = b.stats.goalsFor - b.stats.goalsAgainst;
+      return bGD - aGD;
+    });
+
+    console.log('🔍 SORTED PLAYERS DIAGNOSTIC:', {
+      totalMembers: activeGroup.members.length,
+      playersWithMatches: filteredPlayers.length,
+      topPlayers: sorted.slice(0, 3).map(p => ({
+        handle: p.gamerHandle,
+        played: p.stats.played,
+        points: p.stats.points,
+      })),
+    });
+
+    return sorted;
+  }, [activeGroup]);
 
   const monthlyStats = useMemo(() => {
     if (!activeGroup) return [];
     
-    console.log('📊 Calculating monthly stats, completed matches:', completedMatchesCount, 'timestamp:', Date.now());
-    
     const completedMatches = allMatches.filter(m => m.status === 'completed' && m.completedAt);
+    
+    console.log('📊 MONTHLY STATS DIAGNOSTIC:', {
+      completedMatchesCount,
+      completedMatchesWithDate: completedMatches.length,
+      allMatchesTotal: allMatches.length,
+      timestamp: Date.now(),
+    });
     
     const monthlyData: { [key: string]: { month: string, year: number, matches: Match[] } } = {};
     

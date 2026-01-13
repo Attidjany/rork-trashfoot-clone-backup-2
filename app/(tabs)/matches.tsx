@@ -83,24 +83,24 @@ export default function MatchesScreen() {
   const activeCompetitions = activeGroup.competitions.filter(c => c.status !== 'completed' && c.type !== 'friendly');
   const completedCompetitions = activeGroup.competitions.filter(c => c.status === 'completed' && c.type !== 'friendly');
   const friendlyCompetitions = activeGroup.competitions.filter(c => c.type === 'friendly');
+
+  console.log('🔍 MATCHES TAB DIAGNOSTIC:', {
+    totalCompetitions: activeGroup.competitions.length,
+    activeCompetitions: activeCompetitions.length,
+    completedCompetitions: completedCompetitions.length,
+    friendlyCompetitions: friendlyCompetitions.length,
+    totalMatchesInGroup: activeGroup.competitions.reduce((sum, c) => sum + c.matches.length, 0),
+    competitionDetails: activeGroup.competitions.map(c => ({
+      name: c.name.substring(0, 20),
+      type: c.type,
+      status: c.status,
+      matchCount: c.matches.length,
+    })),
+  });
   
   const allActiveMatches = activeCompetitions.flatMap(c => c.matches);
   const allArchivedMatches = completedCompetitions.flatMap(c => c.matches);
   const allFriendlyMatches = friendlyCompetitions.flatMap(c => c.matches);
-  
-  const sortMatchesByPlayerInvolvement = (matches: Match[]) => {
-    if (!currentPlayerId) return matches;
-    
-    return [...matches].sort((a, b) => {
-      const aIsPlayerMatch = a.homePlayerId === currentPlayerId || a.awayPlayerId === currentPlayerId;
-      const bIsPlayerMatch = b.homePlayerId === currentPlayerId || b.awayPlayerId === currentPlayerId;
-      
-      if (aIsPlayerMatch && !bIsPlayerMatch) return -1;
-      if (!aIsPlayerMatch && bIsPlayerMatch) return 1;
-      
-      return new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime();
-    });
-  };
   
   const sortMatchesByPlayerFirst = (matches: Match[]) => {
     if (!currentPlayerId) return matches;
@@ -431,7 +431,6 @@ export default function MatchesScreen() {
     const isCompleted = match.status === 'completed';
     const homeWon = isCompleted && match.homeScore! > match.awayScore!;
     const awayWon = isCompleted && match.awayScore! > match.homeScore!;
-    const isDraw = isCompleted && match.homeScore === match.awayScore;
 
     return (
       <View
