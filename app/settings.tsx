@@ -4,7 +4,7 @@ import {
   Text,
   View,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Switch,
   Alert,
   TextInput,
@@ -330,11 +330,13 @@ export default function SettingsScreen() {
     rightElement?: React.ReactNode;
     color?: string;
   }) => (
-    <TouchableOpacity 
-      style={styles.settingItem} 
+    <Pressable 
+      style={({ pressed }) => [
+        styles.settingItem,
+        pressed && styles.settingItemPressed
+      ]} 
       onPress={onPress}
       disabled={!onPress}
-      activeOpacity={0.7}
     >
       <View style={styles.settingLeft}>
         <Icon size={24} color={color} />
@@ -344,7 +346,7 @@ export default function SettingsScreen() {
         </View>
       </View>
       {rightElement || (onPress && <ChevronRight size={20} color="#64748B" />)}
-    </TouchableOpacity>
+    </Pressable>
   );
 
   if (groupsLoading) {
@@ -364,13 +366,15 @@ export default function SettingsScreen() {
         <View style={styles.emptyContainer}>
           <User size={64} color="#64748B" />
           <Text style={styles.emptyTitle}>Please login to access settings</Text>
-          <TouchableOpacity 
-            style={styles.primaryButton}
+          <Pressable 
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.buttonPressed
+            ]}
             onPress={() => router.replace('/auth')}
-            activeOpacity={0.7}
           >
             <Text style={styles.primaryButtonText}>Login</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
     );
@@ -386,10 +390,12 @@ export default function SettingsScreen() {
         {/* Profile Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Profile</Text>
-          <TouchableOpacity 
-            style={styles.profileCard}
+          <Pressable 
+            style={({ pressed }) => [
+              styles.profileCard,
+              pressed && styles.cardPressed
+            ]}
             onPress={() => setEditProfileModal(true)}
-            activeOpacity={0.7}
           >
             <View style={styles.avatarContainer}>
               <User size={32} color="#fff" />
@@ -401,7 +407,7 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Edit2 size={20} color="#0EA5E9" />
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         {/* Preferences */}
@@ -560,41 +566,48 @@ export default function SettingsScreen() {
                 <Text style={styles.suggestionsTitle}>Suggestions:</Text>
                 <View style={styles.suggestionsRow}>
                   {handleSuggestions.map((suggestion, index) => (
-                    <TouchableOpacity
+                    <Pressable
                       key={index}
-                      style={styles.suggestionChip}
+                      style={({ pressed }) => [
+                        styles.suggestionChip,
+                        pressed && styles.chipPressed
+                      ]}
                       onPress={() => setEditGamerHandle(suggestion)}
-                      activeOpacity={0.7}
                     >
                       <Text style={styles.suggestionText}>{suggestion}</Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   ))}
                 </View>
               </View>
             )}
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  pressed && styles.buttonPressed
+                ]}
                 onPress={() => {
                   setEditProfileModal(false);
                   setEditName('');
                   setEditGamerHandle('');
                 }}
-                activeOpacity={0.7}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.submitButton}
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.submitButton,
+                  pressed && styles.buttonPressed,
+                  isUpdatingProfile && styles.buttonDisabled
+                ]}
                 onPress={handleUpdateProfile}
                 disabled={isUpdatingProfile}
-                activeOpacity={0.7}
               >
                 <Text style={styles.submitButtonText}>
                   {isUpdatingProfile ? 'Saving...' : 'Save'}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -633,26 +646,31 @@ export default function SettingsScreen() {
             </Text>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  pressed && styles.buttonPressed
+                ]}
                 onPress={() => {
                   setChangeEmailModal(false);
                   setNewEmail('');
                 }}
-                activeOpacity={0.7}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.submitButton}
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.submitButton,
+                  pressed && styles.buttonPressed,
+                  isChangingEmail && styles.buttonDisabled
+                ]}
                 onPress={handleChangeEmail}
                 disabled={isChangingEmail}
-                activeOpacity={0.7}
               >
                 <Text style={styles.submitButtonText}>
                   {isChangingEmail ? 'Sending...' : 'Send Confirmation'}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -889,5 +907,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 18,
     paddingHorizontal: 8,
+  },
+  settingItemPressed: {
+    backgroundColor: '#334155',
+  },
+  cardPressed: {
+    backgroundColor: '#334155',
+  },
+  buttonPressed: {
+    opacity: 0.7,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  chipPressed: {
+    backgroundColor: '#1E293B',
   },
 });
