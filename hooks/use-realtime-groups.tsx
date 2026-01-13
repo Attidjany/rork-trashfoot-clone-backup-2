@@ -153,7 +153,7 @@ export function RealtimeGroupsProvider({ children, userId }: { children: ReactNo
           .in('competition_id', competitionIds)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
-          .limit(10000),
+          .limit(100000),
         
         supabase
           .from('competition_participants')
