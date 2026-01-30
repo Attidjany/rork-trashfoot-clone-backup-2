@@ -150,6 +150,9 @@ BEGIN
   ELSE
     RAISE NOTICE 'No competitions found in database';
   END IF;
-END $$;
+END $;
 
-RAISE NOTICE '✅ All deadline triggers have been fixed to use deadline_date';
+DO $
+BEGIN
+  RAISE NOTICE '✅ All deadline triggers have been fixed to use deadline_date';
+END $;
