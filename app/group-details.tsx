@@ -45,7 +45,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AchievementBadges } from '@/components/AchievementBadges';
 import { supabase } from '@/lib/supabase';
 import { Group } from '@/types/game';
-import { trpc } from '@/lib/trpc';
+
 
 export default function GroupDetailsScreen() {
   const router = useRouter();
@@ -89,10 +89,7 @@ export default function GroupDetailsScreen() {
   const [suspensionDays, setSuspensionDays] = useState('7');
   const [actionLoading, setActionLoading] = useState(false);
   
-  const promoteToAdminMutation = trpc.groups.promoteToAdmin.useMutation();
-  const demoteFromAdminMutation = trpc.groups.demoteFromAdmin.useMutation();
-  const suspendPlayerMutation = trpc.groups.suspendPlayer.useMutation();
-  const unsuspendPlayerMutation = trpc.groups.unsuspendPlayer.useMutation();
+
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
@@ -161,17 +158,26 @@ export default function GroupDetailsScreen() {
 
   const handleDeleteMatch = async (matchId: string) => {
     try {
-      console.log('🗑️ Deleting match:', matchId);
+      console.log('🗑️ Soft-deleting match:', matchId);
       const { error } = await supabase
         .from('matches')
-        .delete()
+        .update({ 
+          status: 'deleted',
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
         .eq('id', matchId);
       
       if (error) {
         console.error('❌ Error deleting match:', error);
         Alert.alert('Error', 'Failed to delete match');
       } else {
-        console.log('✅ Match deleted successfully, realtime will update UI');
+        console.log('✅ Match soft-deleted successfully, can be restored within 7 days');
+        if (Platform.OS === 'web') {
+          alert('Match deleted. Can be restored by superadmin within 7 days.');
+        } else {
+          Alert.alert('Success', 'Match deleted. Can be restored by superadmin within 7 days.');
+        }
       }
     } catch (error: any) {
       console.error('❌ Error deleting match:', error);
@@ -801,13 +807,25 @@ export default function GroupDetailsScreen() {
   );
 
   const handlePromoteToAdmin = async (memberId: string) => {
-    if (!groupId) return;
+    if (!groupId || !playerId) return;
     setActionLoading(true);
     try {
-      await promoteToAdminMutation.mutateAsync({
-        groupId: groupId as string,
-        playerId: memberId,
-      });
+      const { data: currentGroup } = await supabase
+        .from('groups')
+        .select('admin_ids')
+        .eq('id', groupId)
+        .single();
+
+      const adminIds = currentGroup?.admin_ids || [];
+      if (!adminIds.includes(memberId)) {
+        const { error } = await supabase
+          .from('groups')
+          .update({ admin_ids: [...adminIds, memberId] })
+          .eq('id', groupId);
+        
+        if (error) throw error;
+      }
+      
       Alert.alert('Success', 'Player promoted to admin');
       setMemberActionModal(false);
     } catch (error: any) {
@@ -819,13 +837,23 @@ export default function GroupDetailsScreen() {
   };
 
   const handleDemoteFromAdmin = async (memberId: string) => {
-    if (!groupId) return;
+    if (!groupId || !playerId) return;
     setActionLoading(true);
     try {
-      await demoteFromAdminMutation.mutateAsync({
-        groupId: groupId as string,
-        playerId: memberId,
-      });
+      const { data: currentGroup } = await supabase
+        .from('groups')
+        .select('admin_ids')
+        .eq('id', groupId)
+        .single();
+
+      const adminIds = currentGroup?.admin_ids || [];
+      const { error } = await supabase
+        .from('groups')
+        .update({ admin_ids: adminIds.filter((id: string) => id !== memberId) })
+        .eq('id', groupId);
+      
+      if (error) throw error;
+      
       Alert.alert('Success', 'Admin privileges revoked');
       setMemberActionModal(false);
     } catch (error: any) {
@@ -837,14 +865,27 @@ export default function GroupDetailsScreen() {
   };
 
   const handleSuspendPlayer = async (memberId: string, days?: number) => {
-    if (!groupId) return;
+    if (!groupId || !playerId) return;
     setActionLoading(true);
     try {
-      await suspendPlayerMutation.mutateAsync({
-        groupId: groupId as string,
-        playerId: memberId,
-        duration: days,
-      });
+      const until = days ? new Date(Date.now() + days * 86400000).toISOString() : null;
+      
+      const { data: player } = await supabase
+        .from('players')
+        .select('suspended_in_groups')
+        .eq('id', memberId)
+        .single();
+
+      const suspensions = player?.suspended_in_groups || {};
+      suspensions[groupId] = { until };
+
+      const { error } = await supabase
+        .from('players')
+        .update({ suspended_in_groups: suspensions })
+        .eq('id', memberId);
+      
+      if (error) throw error;
+      
       Alert.alert('Success', days ? `Player suspended for ${days} days` : 'Player suspended indefinitely');
       setMemberActionModal(false);
     } catch (error: any) {
@@ -856,13 +897,25 @@ export default function GroupDetailsScreen() {
   };
 
   const handleUnsuspendPlayer = async (memberId: string) => {
-    if (!groupId) return;
+    if (!groupId || !playerId) return;
     setActionLoading(true);
     try {
-      await unsuspendPlayerMutation.mutateAsync({
-        groupId: groupId as string,
-        playerId: memberId,
-      });
+      const { data: player } = await supabase
+        .from('players')
+        .select('suspended_in_groups')
+        .eq('id', memberId)
+        .single();
+
+      const suspensions = player?.suspended_in_groups || {};
+      delete suspensions[groupId];
+
+      const { error } = await supabase
+        .from('players')
+        .update({ suspended_in_groups: suspensions })
+        .eq('id', memberId);
+      
+      if (error) throw error;
+      
       Alert.alert('Success', 'Player suspension lifted');
       setMemberActionModal(false);
     } catch (error: any) {
