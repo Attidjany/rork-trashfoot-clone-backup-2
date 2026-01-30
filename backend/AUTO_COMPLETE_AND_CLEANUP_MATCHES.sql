@@ -2,13 +2,16 @@
 -- AUTOMATIC COMPETITION COMPLETION & MATCH CLEANUP
 -- ============================================
 -- This creates triggers and functions that:
--- 1. Auto-complete competitions when deadline_date is reached
--- 2. Soft-delete all scheduled matches when competition completes
+-- 1. Auto-complete competitions when end_date is reached
+-- 2. Soft-delete scheduled matches when competition completes (sets deleted_at)
 -- 3. Permanently delete matches that have been soft-deleted for 7+ days
 -- 4. Auto-complete competitions when all matches are played
+--
+-- IMPORTANT: Soft delete uses deleted_at column, NOT status change!
+-- Status column only accepts: 'live', 'scheduled', 'completed'
 
 -- ============================================
--- FUNCTION 1: Mark scheduled matches as deleted when competition completes
+-- FUNCTION 1: Soft-delete scheduled matches when competition completes
 -- ============================================
 CREATE OR REPLACE FUNCTION mark_scheduled_matches_deleted()
 RETURNS TRIGGER
@@ -20,12 +23,11 @@ DECLARE
   updated_count INTEGER;
 BEGIN
   IF NEW.status = 'completed' AND (OLD.status IS NULL OR OLD.status != 'completed') THEN
-    RAISE NOTICE '🏁 Competition % completed, marking scheduled matches as deleted', NEW.id;
+    RAISE NOTICE '🏁 Competition % completed, soft-deleting scheduled matches', NEW.id;
     
     WITH updated AS (
       UPDATE matches
       SET 
-        status = 'deleted',
         deleted_at = NOW(),
         updated_at = NOW()
       WHERE competition_id = NEW.id
@@ -36,7 +38,7 @@ BEGIN
     SELECT COUNT(*) INTO updated_count FROM updated;
     
     IF updated_count > 0 THEN
-      RAISE NOTICE '✅ Marked % scheduled matches as deleted for competition %', updated_count, NEW.id;
+      RAISE NOTICE '✅ Soft-deleted % scheduled matches for competition %', updated_count, NEW.id;
     END IF;
   END IF;
   
@@ -65,13 +67,13 @@ BEGIN
       SELECT COUNT(*) INTO total_matches 
       FROM matches 
       WHERE competition_id = NEW.competition_id 
-        AND status != 'deleted'
         AND deleted_at IS NULL;
       
       SELECT COUNT(*) INTO completed_matches 
       FROM matches 
       WHERE competition_id = NEW.competition_id 
-        AND status = 'completed';
+        AND status = 'completed'
+        AND deleted_at IS NULL;
       
       RAISE NOTICE '📊 Competition %: % / % matches completed', NEW.competition_id, completed_matches, total_matches;
       
@@ -92,9 +94,9 @@ END;
 $$;
 
 -- ============================================
--- FUNCTION 3: Check deadline and auto-complete expired competitions
+-- FUNCTION 3: Check end_date and auto-complete expired competitions
 -- ============================================
-CREATE OR REPLACE FUNCTION check_deadline_and_complete()
+CREATE OR REPLACE FUNCTION check_end_date_and_complete()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -106,8 +108,8 @@ BEGIN
     FROM competitions 
     WHERE id = NEW.competition_id
       AND status IN ('active', 'ongoing')
-      AND deadline_date IS NOT NULL
-      AND deadline_date < NOW()
+      AND end_date IS NOT NULL
+      AND end_date < NOW()
   ) THEN
     UPDATE competitions
     SET 
@@ -115,7 +117,7 @@ BEGIN
       updated_at = NOW()
     WHERE id = NEW.competition_id;
     
-    RAISE NOTICE '⏰ Competition % auto-completed (deadline passed)', NEW.competition_id;
+    RAISE NOTICE '⏰ Competition % auto-completed (end_date passed)', NEW.competition_id;
   END IF;
   
   RETURN NEW;
@@ -123,9 +125,9 @@ END;
 $$;
 
 -- ============================================
--- FUNCTION 4: Expire competitions past deadline (can be called periodically)
+-- FUNCTION 4: Expire competitions past end_date (can be called periodically)
 -- ============================================
-CREATE OR REPLACE FUNCTION expire_competitions_past_deadline()
+CREATE OR REPLACE FUNCTION expire_competitions_past_end_date()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -140,8 +142,8 @@ BEGIN
       status = 'completed',
       updated_at = NOW()
     WHERE status IN ('active', 'ongoing')
-      AND deadline_date IS NOT NULL
-      AND deadline_date < NOW()
+      AND end_date IS NOT NULL
+      AND end_date < NOW()
     RETURNING id
   )
   SELECT COUNT(*) INTO expired_count FROM expired;
@@ -186,13 +188,13 @@ $$;
 -- ============================================
 DROP TRIGGER IF EXISTS trigger_mark_scheduled_deleted ON competitions;
 DROP TRIGGER IF EXISTS trigger_check_all_matches_completed ON matches;
-DROP TRIGGER IF EXISTS trigger_check_deadline ON matches;
+DROP TRIGGER IF EXISTS trigger_check_end_date ON matches;
 
 -- ============================================
 -- CREATE TRIGGERS
 -- ============================================
 
--- Trigger 1: When competition status changes to completed, mark scheduled matches as deleted
+-- Trigger 1: When competition status changes to completed, soft-delete scheduled matches
 CREATE TRIGGER trigger_mark_scheduled_deleted
   AFTER UPDATE ON competitions
   FOR EACH ROW
@@ -204,25 +206,25 @@ CREATE TRIGGER trigger_check_all_matches_completed
   FOR EACH ROW
   EXECUTE FUNCTION check_competition_all_matches_completed();
 
--- Trigger 3: When a match is updated, check if competition deadline has passed
-CREATE TRIGGER trigger_check_deadline
+-- Trigger 3: When a match is updated, check if competition end_date has passed
+CREATE TRIGGER trigger_check_end_date
   AFTER INSERT OR UPDATE ON matches
   FOR EACH ROW
-  EXECUTE FUNCTION check_deadline_and_complete();
+  EXECUTE FUNCTION check_end_date_and_complete();
 
 -- ============================================
 -- GRANT PERMISSIONS
 -- ============================================
 GRANT EXECUTE ON FUNCTION mark_scheduled_matches_deleted() TO authenticated;
 GRANT EXECUTE ON FUNCTION check_competition_all_matches_completed() TO authenticated;
-GRANT EXECUTE ON FUNCTION check_deadline_and_complete() TO authenticated;
-GRANT EXECUTE ON FUNCTION expire_competitions_past_deadline() TO authenticated;
+GRANT EXECUTE ON FUNCTION check_end_date_and_complete() TO authenticated;
+GRANT EXECUTE ON FUNCTION expire_competitions_past_end_date() TO authenticated;
 GRANT EXECUTE ON FUNCTION cleanup_old_deleted_matches() TO authenticated;
 
 -- ============================================
 -- RUN INITIAL CLEANUP
 -- ============================================
-SELECT expire_competitions_past_deadline();
+SELECT expire_competitions_past_end_date();
 SELECT cleanup_old_deleted_matches();
 
 -- ============================================
@@ -238,7 +240,7 @@ BEGIN
   WHERE trigger_name IN (
     'trigger_mark_scheduled_deleted',
     'trigger_check_all_matches_completed',
-    'trigger_check_deadline'
+    'trigger_check_end_date'
   );
   
   SELECT COUNT(*) INTO function_count
@@ -246,8 +248,8 @@ BEGIN
   WHERE proname IN (
     'mark_scheduled_matches_deleted',
     'check_competition_all_matches_completed',
-    'check_deadline_and_complete',
-    'expire_competitions_past_deadline',
+    'check_end_date_and_complete',
+    'expire_competitions_past_end_date',
     'cleanup_old_deleted_matches'
   );
   

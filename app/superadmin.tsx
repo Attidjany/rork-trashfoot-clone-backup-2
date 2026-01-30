@@ -499,7 +499,6 @@ export default function SuperAdminScreen() {
 
     try {
       const { error } = await supabase.from('matches').update({ 
-        status: 'deleted',
         deleted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }).eq('id', matchId);
