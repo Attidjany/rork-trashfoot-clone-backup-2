@@ -223,21 +223,4 @@ BEGIN
   ELSE
     RAISE WARNING '⚠️ Expected 3 triggers, found %', trigger_count;
   END IF;
-END $;
-
-DO $
-BEGIN
-  RAISE NOTICE '
-╔════════════════════════════════════════════════════════════════╗
-║  ✅ AUTO-COMPLETION TRIGGERS INSTALLED                         ║
-╚════════════════════════════════════════════════════════════════╝
-
-Realtime behavior:
-  1. ✓ When all matches are played → Competition auto-completes
-  2. ✓ When any match activity occurs + deadline passed → Competition auto-completes
-  3. ✓ When competition completes → All scheduled matches marked as deleted
-  
-Optional: Call expire_competitions_past_deadline() periodically to check
-all competitions without waiting for match activity.
-';
-END $;
+END $$;
