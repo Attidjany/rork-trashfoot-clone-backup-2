@@ -223,9 +223,11 @@ BEGIN
   ELSE
     RAISE WARNING '⚠️ Expected 3 triggers, found %', trigger_count;
   END IF;
-END $$;
+END $;
 
-RAISE NOTICE '
+DO $
+BEGIN
+  RAISE NOTICE '
 ╔════════════════════════════════════════════════════════════════╗
 ║  ✅ AUTO-COMPLETION TRIGGERS INSTALLED                         ║
 ╚════════════════════════════════════════════════════════════════╝
@@ -238,3 +240,4 @@ Realtime behavior:
 Optional: Call expire_competitions_past_deadline() periodically to check
 all competitions without waiting for match activity.
 ';
+END $;
