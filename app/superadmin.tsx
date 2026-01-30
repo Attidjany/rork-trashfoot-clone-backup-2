@@ -499,11 +499,12 @@ export default function SuperAdminScreen() {
 
     try {
       const { error } = await supabase.from('matches').update({ 
-        status: 'deleted',
         deleted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }).eq('id', matchId);
       if (error) throw error;
+
+      await loadMatches();
 
       if (Platform.OS === 'web') {
         alert('Match deleted successfully. Can be restored within 7 days.');
@@ -549,11 +550,12 @@ export default function SuperAdminScreen() {
 
     try {
       const { error } = await supabase.from('matches').update({ 
-        status: 'scheduled',
         deleted_at: null,
         updated_at: new Date().toISOString()
       }).eq('id', matchId);
       if (error) throw error;
+
+      await loadMatches();
 
       if (Platform.OS === 'web') {
         alert('Match restored successfully');
@@ -1057,7 +1059,7 @@ export default function SuperAdminScreen() {
                   <Text style={styles.adminButtonText}>Correct Score</Text>
                 </TouchableOpacity>
               )}
-              {match.status === 'deleted' && match.deleted_at ? (
+              {match.deleted_at ? (
                 <TouchableOpacity
                   style={[styles.adminButton, styles.restoreButton]}
                   onPress={() => handleRestoreMatch(match.id, match.deleted_at)}
