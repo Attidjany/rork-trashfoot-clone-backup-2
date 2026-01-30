@@ -499,6 +499,7 @@ export default function SuperAdminScreen() {
 
     try {
       const { error } = await supabase.from('matches').update({ 
+        status: 'deleted',
         deleted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }).eq('id', matchId);
@@ -550,6 +551,7 @@ export default function SuperAdminScreen() {
 
     try {
       const { error } = await supabase.from('matches').update({ 
+        status: 'scheduled',
         deleted_at: null,
         updated_at: new Date().toISOString()
       }).eq('id', matchId);
