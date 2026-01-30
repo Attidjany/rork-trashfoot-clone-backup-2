@@ -29,6 +29,7 @@ import {
   TrendingUp,
   Eye,
   LogOut,
+  RotateCcw,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
@@ -317,6 +318,7 @@ export default function SuperAdminScreen() {
           status,
           home_score,
           away_score,
+          deleted_at,
           home_player:players!matches_home_player_id_fkey(name),
           away_player:players!matches_away_player_id_fkey(name),
           competition:competitions(
@@ -481,11 +483,11 @@ export default function SuperAdminScreen() {
 
   const handleDeleteMatch = async (matchId: string) => {
     const confirmed = Platform.OS === 'web'
-      ? window.confirm('Are you sure you want to delete this match?')
+      ? window.confirm('Are you sure you want to delete this match? It can be restored within 7 days.')
       : await new Promise(resolve => {
           Alert.alert(
             'Delete Match',
-            'Are you sure you want to delete this match?',
+            'Are you sure you want to delete this match? It can be restored within 7 days.',
             [
               { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
               { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }
@@ -496,19 +498,73 @@ export default function SuperAdminScreen() {
     if (!confirmed) return;
 
     try {
-      const { error } = await supabase.from('matches').delete().eq('id', matchId);
+      const { error } = await supabase.from('matches').update({ 
+        status: 'deleted',
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).eq('id', matchId);
       if (error) throw error;
 
       if (Platform.OS === 'web') {
-        alert('Match deleted successfully');
+        alert('Match deleted successfully. Can be restored within 7 days.');
       } else {
-        Alert.alert('Success', 'Match deleted successfully');
+        Alert.alert('Success', 'Match deleted successfully. Can be restored within 7 days.');
       }
     } catch (error: any) {
       if (Platform.OS === 'web') {
         alert(error.message || 'Failed to delete match');
       } else {
         Alert.alert('Error', error.message || 'Failed to delete match');
+      }
+    }
+  };
+
+  const handleRestoreMatch = async (matchId: string, deletedAt: string) => {
+    const deletedDate = new Date(deletedAt);
+    const daysSinceDeleted = (Date.now() - deletedDate.getTime()) / (1000 * 60 * 60 * 24);
+    
+    if (daysSinceDeleted > 7) {
+      if (Platform.OS === 'web') {
+        alert('Cannot restore: Match was deleted more than 7 days ago');
+      } else {
+        Alert.alert('Error', 'Cannot restore: Match was deleted more than 7 days ago');
+      }
+      return;
+    }
+
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('Restore this match?')
+      : await new Promise(resolve => {
+          Alert.alert(
+            'Restore Match',
+            'Are you sure you want to restore this match?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Restore', onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('matches').update({ 
+        status: 'scheduled',
+        deleted_at: null,
+        updated_at: new Date().toISOString()
+      }).eq('id', matchId);
+      if (error) throw error;
+
+      if (Platform.OS === 'web') {
+        alert('Match restored successfully');
+      } else {
+        Alert.alert('Success', 'Match restored successfully');
+      }
+    } catch (error: any) {
+      if (Platform.OS === 'web') {
+        alert(error.message || 'Failed to restore match');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to restore match');
       }
     }
   };
@@ -962,9 +1018,16 @@ export default function SuperAdminScreen() {
                 <Text style={styles.cardSubtitle}>
                   {compInfo.groupName} • {compInfo.name}
                 </Text>
-                <Text style={styles.cardSubtitle}>
-                  Status: {match.status}
-                </Text>
+                <View style={styles.statusRow}>
+                  <Text style={styles.cardSubtitle}>
+                    Status: {match.status}
+                  </Text>
+                  {match.status === 'deleted' && match.deleted_at && (
+                    <Text style={styles.deletedInfo}>
+                      ({Math.ceil((Date.now() - new Date(match.deleted_at).getTime()) / (1000 * 60 * 60 * 24))}d ago)
+                    </Text>
+                  )}
+                </View>
                 {match.status === 'completed' && (
                   <View style={styles.matchScoreRow}>
                     <Text style={[styles.matchScore, homeWon && styles.winnerScore]}>
@@ -994,13 +1057,23 @@ export default function SuperAdminScreen() {
                   <Text style={styles.adminButtonText}>Correct Score</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
-                style={[styles.adminButton, styles.deleteButton]}
-                onPress={() => handleDeleteMatch(match.id)}
-              >
-                <Trash2 size={14} color="#fff" />
-                <Text style={styles.adminButtonText}>Delete</Text>
-              </TouchableOpacity>
+              {match.status === 'deleted' && match.deleted_at ? (
+                <TouchableOpacity
+                  style={[styles.adminButton, styles.restoreButton]}
+                  onPress={() => handleRestoreMatch(match.id, match.deleted_at)}
+                >
+                  <RotateCcw size={14} color="#fff" />
+                  <Text style={styles.adminButtonText}>Restore Match</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.adminButton, styles.deleteButton]}
+                  onPress={() => handleDeleteMatch(match.id)}
+                >
+                  <Trash2 size={14} color="#fff" />
+                  <Text style={styles.adminButtonText}>Delete Match</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         );
@@ -1569,6 +1642,19 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: '#7C2D12',
+  },
+  restoreButton: {
+    backgroundColor: '#10B981',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deletedInfo: {
+    fontSize: 12,
+    color: '#F59E0B',
+    fontStyle: 'italic',
   },
   editButton: {
     backgroundColor: '#3B82F6',

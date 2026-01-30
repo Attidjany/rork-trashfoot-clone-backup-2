@@ -11,6 +11,7 @@ import { createCompetitionProcedure, getGroupCompetitionsProcedure } from "./rou
 import { updateMatchResultProcedure } from "./routes/matches/update-result/route";
 import { correctMatchScoreProcedure } from "./routes/matches/correct-score/route";
 import { deleteMatchProcedure } from "./routes/matches/delete/route";
+import { restoreMatchProcedure } from "./routes/matches/restore/route";
 import { getAllAccountsProcedure, deleteAccountProcedure, getAccountStatsProcedure, bulkDeleteAccountsProcedure } from "./routes/admin/accounts/route";
 import { getAllGroupsProcedure, deleteGroupProcedure, removeUserFromGroupProcedure, deleteMatchProcedure as superadminDeleteMatchProcedure, correctMatchScoreProcedure as superadminCorrectMatchScoreProcedure, manageJoinRequestProcedure, deleteCompetitionProcedure, assignGroupAdminProcedure, deletePlayerProcedure, getAllMatchesProcedure, getAllCompetitionsProcedure, getAllPlayersProcedure, getPlatformStatsProcedure } from "./routes/admin/superadmin/route";
 
@@ -65,6 +66,7 @@ export const appRouter = createTRPCRouter({
     updateResult: updateMatchResultProcedure,
     correctScore: correctMatchScoreProcedure,
     delete: deleteMatchProcedure,
+    restore: restoreMatchProcedure,
   }),
 });
 

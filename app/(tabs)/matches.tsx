@@ -234,17 +234,21 @@ export default function MatchesScreen() {
     if (Platform.OS === 'web') {
       if (window.confirm('Are you sure you want to delete this match?')) {
         try {
-          console.log('🗑️ Deleting match via Supabase:', matchId);
+          console.log('🗑️ Soft deleting match:', matchId);
           const { error } = await supabase
             .from('matches')
-            .delete()
+            .update({
+              status: 'deleted',
+              deleted_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
             .eq('id', matchId);
           
           if (error) {
             console.error('❌ Error deleting match:', error);
             Alert.alert('Error', 'Failed to delete match');
           } else {
-            console.log('✅ Match deleted successfully');
+            console.log('✅ Match soft deleted successfully');
             await refetchGroups();
             Alert.alert('Success', 'Match deleted successfully');
           }
@@ -264,17 +268,21 @@ export default function MatchesScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                console.log('🗑️ Deleting match via Supabase:', matchId);
+                console.log('🗑️ Soft deleting match:', matchId);
                 const { error } = await supabase
                   .from('matches')
-                  .delete()
+                  .update({
+                    status: 'deleted',
+                    deleted_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
                   .eq('id', matchId);
                 
                 if (error) {
                   console.error('❌ Error deleting match:', error);
                   Alert.alert('Error', 'Failed to delete match');
                 } else {
-                  console.log('✅ Match deleted successfully');
+                  console.log('✅ Match soft deleted successfully');
                   await refetchGroups();
                   Alert.alert('Success', 'Match deleted successfully');
                 }
