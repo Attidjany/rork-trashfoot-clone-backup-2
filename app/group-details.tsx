@@ -162,7 +162,6 @@ export default function GroupDetailsScreen() {
       const { error } = await supabase
         .from('matches')
         .update({ 
-          status: 'deleted',
           deleted_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })

@@ -53,6 +53,41 @@ export default function MatchesScreen() {
     fetchCurrentPlayerId();
   }, [user?.id]);
   const [selectedTab, setSelectedTab] = useState<'upcoming' | 'live' | 'completed' | 'archived' | 'friendly' | 'tournaments'>('upcoming');
+  const lastTapRef = useRef<{ tab: string; time: number }>({ tab: '', time: 0 });
+
+  const handleTabPress = (tab: typeof selectedTab) => {
+    const now = Date.now();
+    if (lastTapRef.current.tab === tab && now - lastTapRef.current.time < 500) {
+      if (tab === 'upcoming' || tab === 'friendly') {
+        handleManualCleanup();
+      }
+    }
+    lastTapRef.current = { tab, time: now };
+    setSelectedTab(tab);
+  };
+
+  const handleManualCleanup = async () => {
+    try {
+      console.log('🧹 Triggering manual cleanup of expired competitions...');
+      const { error: expireError } = await supabase.rpc('expire_competitions_past_end_date');
+      if (expireError) {
+        console.error('❌ Error expiring competitions:', expireError);
+      } else {
+        console.log('✅ Expired competitions cleanup done');
+      }
+      const { error: cleanupError } = await supabase.rpc('cleanup_old_deleted_matches');
+      if (cleanupError) {
+        console.error('❌ Error cleaning up deleted matches:', cleanupError);
+      } else {
+        console.log('✅ Old deleted matches cleanup done');
+      }
+      await refetchGroups();
+      Alert.alert('Cleanup Done', 'Expired competitions and old deleted matches have been cleaned up.');
+    } catch (error: any) {
+      console.error('❌ Cleanup error:', error);
+      Alert.alert('Error', error?.message || 'Cleanup failed');
+    }
+  };
   const [resultModal, setResultModal] = useState(false);
   const [youtubeModal, setYoutubeModal] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -238,7 +273,6 @@ export default function MatchesScreen() {
           const { error } = await supabase
             .from('matches')
             .update({
-              status: 'deleted',
               deleted_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
@@ -250,7 +284,7 @@ export default function MatchesScreen() {
           } else {
             console.log('✅ Match soft deleted successfully');
             await refetchGroups();
-            Alert.alert('Success', 'Match deleted successfully');
+            Alert.alert('Success', 'Match deleted. Can be restored by superadmin within 7 days.');
           }
         } catch (error: any) {
           console.error('❌ Error deleting match:', error);
@@ -272,7 +306,6 @@ export default function MatchesScreen() {
                 const { error } = await supabase
                   .from('matches')
                   .update({
-                    status: 'deleted',
                     deleted_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                   })
@@ -284,7 +317,7 @@ export default function MatchesScreen() {
                 } else {
                   console.log('✅ Match soft deleted successfully');
                   await refetchGroups();
-                  Alert.alert('Success', 'Match deleted successfully');
+                  Alert.alert('Success', 'Match deleted. Can be restored by superadmin within 7 days.');
                 }
               } catch (error: any) {
                 console.error('❌ Error deleting match:', error);
@@ -618,7 +651,7 @@ export default function MatchesScreen() {
         <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[styles.tab, selectedTab === 'upcoming' && styles.activeTab]}
-            onPress={() => setSelectedTab('upcoming')}
+            onPress={() => handleTabPress('upcoming')}
           >
             <Text style={[styles.tabText, selectedTab === 'upcoming' && styles.activeTabText]}>
               Upcoming ({upcomingMatches.length})
@@ -626,7 +659,7 @@ export default function MatchesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, selectedTab === 'live' && styles.activeTab]}
-            onPress={() => setSelectedTab('live')}
+            onPress={() => handleTabPress('live')}
           >
             <Text style={[styles.tabText, selectedTab === 'live' && styles.activeTabText]}>
               Live ({liveMatches.length})
@@ -634,7 +667,7 @@ export default function MatchesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, selectedTab === 'completed' && styles.activeTab]}
-            onPress={() => setSelectedTab('completed')}
+            onPress={() => handleTabPress('completed')}
           >
             <Text style={[styles.tabText, selectedTab === 'completed' && styles.activeTabText]}>
               Completed ({completedMatches.length})
@@ -642,7 +675,7 @@ export default function MatchesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, selectedTab === 'archived' && styles.activeTab]}
-            onPress={() => setSelectedTab('archived')}
+            onPress={() => handleTabPress('archived')}
           >
             <Text style={[styles.tabText, selectedTab === 'archived' && styles.activeTabText]}>
               Archived ({archivedMatches.length})
@@ -650,7 +683,7 @@ export default function MatchesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, selectedTab === 'friendly' && styles.activeTab]}
-            onPress={() => setSelectedTab('friendly')}
+            onPress={() => handleTabPress('friendly')}
           >
             <Text style={[styles.tabText, selectedTab === 'friendly' && styles.activeTabText]}>
               Friendly ({friendlyMatches.length})
@@ -658,7 +691,7 @@ export default function MatchesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, selectedTab === 'tournaments' && styles.activeTab]}
-            onPress={() => setSelectedTab('tournaments')}
+            onPress={() => handleTabPress('tournaments')}
           >
             <Text style={[styles.tabText, selectedTab === 'tournaments' && styles.activeTabText]}>
               Tournaments ({knockoutTournaments.length})
